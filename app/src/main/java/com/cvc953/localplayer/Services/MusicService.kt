@@ -20,9 +20,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.graphics.scale
 import com.cvc953.localplayer.MainActivity
 import com.cvc953.localplayer.R
-import com.cvc953.localplayer.controller.PlayerController
-import com.cvc953.localplayer.widget.PlayerWidget
 import androidx.media.session.MediaButtonReceiver
+import com.cvc953.localplayer.controller.PlayerController
+import com.cvc953.localplayer.preferences.AppPrefs
+import com.cvc953.localplayer.widget.PlayerWidget
+import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -88,8 +90,16 @@ class MusicService : Service() {
                         mediaSession.isActive = true
                         updateMediaSession()
                         updateNotification()
-                        // Widget state update via GlanceAppWidgetManager (internal API)
-                        lastUpdateTimeMs = System.currentTimeMillis()
+                            // Widget state update
+                            PlayerWidget().updateAll(this@MusicService)
+                            AppPrefs(this@MusicService).apply {
+                                saveTitle(title)
+                                saveArtist(artist)
+                                saveIsPlaying(isPlaying)
+                                savePlaybackPosition(positionMs)
+                                saveDuration(durationMs)
+                            }
+                            lastUpdateTimeMs = System.currentTimeMillis()
                     } else if (newSong != null) {
                         // Misma canción, solo actualiza estado
                         title = newSong.title.ifBlank { "Reproduciendo" }

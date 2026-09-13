@@ -6,6 +6,9 @@ plugins {
 android {
     namespace = "com.cvc953.localplayer"
     compileSdk = 36
+    composeOptions {
+        kotlinCompilerExtensionVersion = libs.versions.kotlinCompilerExtensionVersion.get()
+    }
 
     dependenciesInfo {
         // Desactiva la inclusión de metadatos de dependencias en el APK
