@@ -21,6 +21,7 @@ import androidx.core.graphics.scale
 import com.cvc953.localplayer.MainActivity
 import com.cvc953.localplayer.R
 import com.cvc953.localplayer.controller.PlayerController
+import androidx.media.session.MediaButtonReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -146,6 +147,10 @@ class MusicService : Service() {
                 override fun onSkipToPrevious() {
                     playerController.previous()
                 }
+
+                override fun onSeekTo(pos: Long) {
+                    playerController.seekTo(pos)
+                }
             },
         )
 
@@ -157,6 +162,10 @@ class MusicService : Service() {
         flags: Int,
         startId: Int,
     ): Int {
+
+        if (intent != null && MediaButtonReceiver.handleIntent(mediaSession, intent) != null) {
+            return START_STICKY
+        }
 
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> {

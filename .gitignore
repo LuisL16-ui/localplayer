@@ -26,6 +26,8 @@ paths-to-remove.txt
 .idea/deploymentTargetSelector.xml
 .idea/deploymentTargetSelector.xml
 .idea/deploymentTargetSelector.xml
+.atl/
+# Existing entry for skill-registry.md
 .atl/skill-registry.md
 openspec/changes/player-skin-system/design.md
 openspec/changes/player-skin-system/tasks.md
