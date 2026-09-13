@@ -1,6 +1,8 @@
 package com.cvc953.localplayer.widget
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.glance.GlanceId
@@ -18,6 +20,10 @@ import androidx.glance.text.Text
 import androidx.glance.Button
 import androidx.glance.appwidget.LinearProgressIndicator
 import com.cvc953.localplayer.preferences.AppPrefs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 
 class PlayerWidget : GlanceAppWidget() {
 
@@ -32,8 +38,24 @@ class PlayerWidget : GlanceAppWidget() {
         val position = prefs.loadPlaybackPosition()
         val isPlaying = prefs.loadIsPlaying()
         val duration = prefs.loadDuration()
+        val albumUri = lastUri?.let { uri ->
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val inputStream = context.contentResolver.openInputStream(Uri.parse(uri))
+                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    inputStream?.close()
+                    if (bitmap != null) {
+                        val cacheFile = File(context.cacheDir, "widget_album.png")
+                        FileOutputStream(cacheFile).use { out ->
+                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                        }
+                        Uri.fromFile(cacheFile)
+                    } else null
+                }
+            }.getOrNull()
+        }
         provideContent {
-            Content(songTitle, artist, position, isPlaying, lastUri, duration)
+            Content(songTitle, artist, position, isPlaying, duration, albumUri)
         }
     }
 
@@ -43,13 +65,13 @@ class PlayerWidget : GlanceAppWidget() {
         artist: String,
         position: Long,
         isPlaying: Boolean,
-        songUri: String?,
         duration: Long,
+        albumUri: Uri?,
     ) {
         Column(modifier = GlanceModifier.fillMaxSize()) {
-            songUri?.let { uri ->
+            albumUri?.let { uri ->
                 Image(
-                    provider = ImageProvider(Uri.parse(uri)),
+                    provider = ImageProvider(uri),
                     contentDescription = "Album art",
                     modifier = GlanceModifier.fillMaxSize(),
                 )
