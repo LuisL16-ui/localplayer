@@ -73,7 +73,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/player_widget_info" />
+                android:value="com.cvc953.localplayer.widget.PlayerWidget" />
         </receiver>
 
     </application>
