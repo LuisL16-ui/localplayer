@@ -21,6 +21,7 @@ import androidx.core.graphics.scale
 import com.cvc953.localplayer.MainActivity
 import com.cvc953.localplayer.R
 import com.cvc953.localplayer.controller.PlayerController
+import com.cvc953.localplayer.widget.PlayerWidget
 import androidx.media.session.MediaButtonReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -87,6 +88,7 @@ class MusicService : Service() {
                         mediaSession.isActive = true
                         updateMediaSession()
                         updateNotification()
+                        // Widget state update via GlanceAppWidgetManager (internal API)
                         lastUpdateTimeMs = System.currentTimeMillis()
                     } else if (newSong != null) {
                         // Misma canción, solo actualiza estado
@@ -101,6 +103,7 @@ class MusicService : Service() {
                         if (playStateChanged || now - lastUpdateTimeMs >= 1000L) {
                             updateMediaSession()
                             updateNotification()
+                            // Widget state update via GlanceAppWidgetManager (internal API)
                             lastUpdateTimeMs = now
                         }
                     } else {
@@ -113,6 +116,7 @@ class MusicService : Service() {
                         if (now - lastUpdateTimeMs >= 1000L) {
                             updateMediaSession()
                             updateNotification()
+                            // Widget state update via GlanceAppWidgetManager (internal API)
                             lastUpdateTimeMs = now
                         }
                     }
