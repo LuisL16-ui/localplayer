@@ -8,7 +8,7 @@ import androidx.glance.appwidget.action.ActionCallback
 import com.cvc953.localplayer.Services.MusicService
 
 abstract class MusicServiceAction(
-    private val action: String,
+    val action: String,
 ) : ActionCallback {
     override suspend fun onAction(
         context: Context,
