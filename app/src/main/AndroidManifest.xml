@@ -64,7 +64,7 @@
         </receiver>
 
         <receiver
-            android:name="androidx.glance.appwidget.GlanceAppWidgetReceiver"
+            android:name=".widget.PlayerWidgetReceiver"
             android:exported="true"
             android:label="@string/widget_label">
             <intent-filter>
@@ -73,7 +73,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:value="com.cvc953.localplayer.widget.PlayerWidget" />
+                android:resource="@xml/player_widget_info" />
         </receiver>
 
     </application>
