@@ -27,6 +27,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlin.math.max
+import kotlin.math.min
 
 class MusicService : Service() {
     companion object {
@@ -36,6 +38,8 @@ class MusicService : Service() {
         const val ACTION_NEXT = "com.cvc953.localplayer.ACTION_NEXT"
         const val ACTION_PREV = "com.cvc953.localplayer.ACTION_PREV"
         const val ACTION_UPDATE_STATE = "com.cvc953.localplayer.ACTION_UPDATE_STATE"
+        const val ACTION_SEEK_BACKWARD = "com.cvc953.localplayer.ACTION_SEEK_BACKWARD"
+        const val ACTION_SEEK_FORWARD = "com.cvc953.localplayer.ACTION_SEEK_FORWARD"
     }
 
     private var title: String = "Reproduciendo"
@@ -189,6 +193,16 @@ class MusicService : Service() {
                 positionMs = intent.getLongExtra("POSITION", positionMs)
                 updateMediaSession()
                 updateNotification()
+                return START_STICKY
+            }
+
+            ACTION_SEEK_BACKWARD -> {
+                playerController.seekTo(max(0L, positionMs - 10_000))
+                return START_STICKY
+            }
+
+            ACTION_SEEK_FORWARD -> {
+                playerController.seekTo(min(durationMs, positionMs + 10_000))
                 return START_STICKY
             }
         }
