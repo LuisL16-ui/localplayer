@@ -90,16 +90,20 @@ class MusicService : Service() {
                         mediaSession.isActive = true
                         updateMediaSession()
                         updateNotification()
-                            // Widget state update
-                            PlayerWidget().updateAll(this@MusicService)
-                            AppPrefs(this@MusicService).apply {
-                                saveTitle(title)
-                                saveArtist(artist)
-                                saveIsPlaying(isPlaying)
-                                savePlaybackPosition(positionMs)
-                                saveDuration(durationMs)
-                            }
-                            lastUpdateTimeMs = System.currentTimeMillis()
+                         // Widget state update
+                             try {
+                                 PlayerWidget().updateAll(this@MusicService)
+                                 AppPrefs(this@MusicService).apply {
+                                     saveTitle(title)
+                                     saveArtist(artist)
+                                     saveIsPlaying(isPlaying)
+                                     savePlaybackPosition(positionMs)
+                             saveDuration(durationMs)
+                         }
+                         lastUpdateTimeMs = System.currentTimeMillis()
+                         } catch (e: Exception) {
+                             Log.w("MusicService", "Widget update skipped: ${e.message}")
+                         }
                     } else if (newSong != null) {
                         // Misma canción, solo actualiza estado
                         title = newSong.title.ifBlank { "Reproduciendo" }
