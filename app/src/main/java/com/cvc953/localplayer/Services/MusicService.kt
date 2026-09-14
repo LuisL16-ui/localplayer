@@ -24,7 +24,6 @@ import androidx.media.session.MediaButtonReceiver
 import com.cvc953.localplayer.controller.PlayerController
 import com.cvc953.localplayer.preferences.AppPrefs
 import com.cvc953.localplayer.widget.PlayerWidget
-import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -60,7 +59,6 @@ class MusicService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-
         createNotificationChannel()
         initMediaSession()
 
@@ -90,20 +88,8 @@ class MusicService : Service() {
                         mediaSession.isActive = true
                         updateMediaSession()
                         updateNotification()
-                         // Widget state update
-                             try {
-                                 PlayerWidget().updateAll(this@MusicService)
-                                 AppPrefs(this@MusicService).apply {
-                                     saveTitle(title)
-                                     saveArtist(artist)
-                                     saveIsPlaying(isPlaying)
-                                     savePlaybackPosition(positionMs)
-                             saveDuration(durationMs)
-                         }
+                        updateWidgetState()
                          lastUpdateTimeMs = System.currentTimeMillis()
-                         } catch (e: Exception) {
-                             Log.w("MusicService", "Widget update skipped: ${e.message}")
-                         }
                     } else if (newSong != null) {
                         // Misma canción, solo actualiza estado
                         title = newSong.title.ifBlank { "Reproduciendo" }
@@ -117,7 +103,7 @@ class MusicService : Service() {
                         if (playStateChanged || now - lastUpdateTimeMs >= 1000L) {
                             updateMediaSession()
                             updateNotification()
-                            // Widget state update via GlanceAppWidgetManager (internal API)
+                            updateWidgetState()
                             lastUpdateTimeMs = now
                         }
                     } else {
@@ -192,16 +178,19 @@ class MusicService : Service() {
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> {
                 playerController.togglePlayPause()
+                serviceScope.launch { updateWidgetState() }
                 return START_STICKY
             }
 
             ACTION_PREV -> {
                 playerController.previous()
+                serviceScope.launch { updateWidgetState() }
                 return START_STICKY
             }
 
             ACTION_NEXT -> {
                 playerController.next()
+                serviceScope.launch { updateWidgetState() }
                 return START_STICKY
             }
 
@@ -209,18 +198,24 @@ class MusicService : Service() {
                 isPlaying = intent.getBooleanExtra("IS_PLAYING", false)
                 durationMs = intent.getLongExtra("DURATION", durationMs)
                 positionMs = intent.getLongExtra("POSITION", positionMs)
+                intent.getStringExtra("SONG_URI")?.let { currentSongUri = it }
+                intent.getStringExtra("TITLE")?.let { title = it }
+                intent.getStringExtra("ARTIST")?.let { artist = it }
                 updateMediaSession()
                 updateNotification()
+                serviceScope.launch { updateWidgetState() }
                 return START_STICKY
             }
 
             ACTION_SEEK_BACKWARD -> {
                 playerController.seekTo(max(0L, positionMs - 10_000))
+                serviceScope.launch { updateWidgetState() }
                 return START_STICKY
             }
 
             ACTION_SEEK_FORWARD -> {
                 playerController.seekTo(min(durationMs, positionMs + 10_000))
+                serviceScope.launch { updateWidgetState() }
                 return START_STICKY
             }
         }
@@ -365,6 +360,22 @@ class MusicService : Service() {
             notificationManager.notify(NOTIF_ID, createNotification())
         } catch (e: Exception) {
             Log.e("MusicService", "✗ updateNotification error: ${e.message}", e)
+        }
+    }
+
+    private suspend fun updateWidgetState() {
+        try {
+            AppPrefs(this).apply {
+                saveLastSongUri(currentSongUri.takeIf { it.isNotBlank() })
+                saveTitle(title)
+                saveArtist(artist)
+                saveIsPlaying(isPlaying)
+                savePlaybackPosition(positionMs)
+                saveDuration(durationMs)
+            }
+            PlayerWidget.refresh(this)
+        } catch (e: Exception) {
+            Log.w("MusicService", "Widget update failed: ${e.message}", e)
         }
     }
 

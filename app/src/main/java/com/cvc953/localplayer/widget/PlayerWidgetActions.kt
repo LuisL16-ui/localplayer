@@ -2,6 +2,7 @@ package com.cvc953.localplayer.widget
 
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.action.ActionCallback
@@ -15,8 +16,9 @@ abstract class MusicServiceAction(
         glanceId: GlanceId,
         parameters: ActionParameters,
     ) {
-        context.startService(
-            Intent(context, MusicService::class.java).apply { this.action = action }
+        ContextCompat.startForegroundService(
+            context,
+            Intent(context, MusicService::class.java).apply { this.action = action },
         )
     }
 }

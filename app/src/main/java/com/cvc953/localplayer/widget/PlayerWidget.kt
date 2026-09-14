@@ -1,146 +1,133 @@
 package com.cvc953.localplayer.widget
 
+import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Path
+import android.graphics.Rect
+import android.graphics.RectF
+import android.media.MediaMetadataRetriever
 import android.net.Uri
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.glance.GlanceId
-import androidx.glance.GlanceModifier
-import androidx.glance.Image
-import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.ImageProvider
-import androidx.glance.appwidget.action.actionRunCallback
-import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
-import androidx.glance.layout.Alignment
-import androidx.glance.layout.Column
-import androidx.glance.layout.Row
-import androidx.glance.layout.fillMaxHeight
-import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.padding
-import androidx.glance.layout.size
-import androidx.glance.color.ColorProvider
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
-import androidx.glance.Button
-import androidx.glance.appwidget.LinearProgressIndicator
-import androidx.glance.background
+import android.os.Build
+import com.cvc953.localplayer.MainActivity
+import com.cvc953.localplayer.R
+import com.cvc953.localplayer.Services.MusicService
 import com.cvc953.localplayer.preferences.AppPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileOutputStream
 
-class PlayerWidget : GlanceAppWidget() {
-
-    override suspend fun provideGlance(
-        context: Context,
-        id: GlanceId,
-    ) {
-        val prefs = AppPrefs(context)
-        val lastUri = prefs.loadLastSongUri()
-        val songTitle = prefs.loadTitle()
-        val artist = prefs.loadArtist()
-        val position = prefs.loadPlaybackPosition()
-        val isPlaying = prefs.loadIsPlaying()
-        val duration = prefs.loadDuration()
-
-        val albumUri = lastUri?.let { uri ->
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val inputStream = context.contentResolver.openInputStream(Uri.parse(uri))
-                    val bitmap = BitmapFactory.decodeStream(inputStream)
-                    inputStream?.close()
-                    if (bitmap != null) {
-                        val cacheFile = File(context.cacheDir, "widget_album.png")
-                        FileOutputStream(cacheFile).use { out ->
-                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                        }
-                        Uri.fromFile(cacheFile)
-                    } else null
-                }
-            }.getOrNull()
+class PlayerWidget {
+    companion object {
+        suspend fun refresh(context: Context) {
+            withContext(Dispatchers.IO) {
+                updateAll(context.applicationContext)
+            }
         }
 
-        provideContent {
-            WidgetContent(songTitle, artist, position, isPlaying, duration, albumUri)
+        fun updateAll(context: Context) {
+            val appContext = context.applicationContext
+            val manager = AppWidgetManager.getInstance(appContext)
+            val provider = ComponentName(appContext, PlayerWidgetReceiver::class.java)
+            val ids = manager.getAppWidgetIds(provider)
+            if (ids.isEmpty()) return
+
+            val prefs = AppPrefs(appContext)
+            val primaryColor = runCatching {
+                android.graphics.Color.parseColor(prefs.getPrimaryColor())
+            }.getOrDefault(0xFF2196F3.toInt())
+            val artwork = prefs.loadLastSongUri()?.let { loadAlbumArt(appContext, it) }
+            val views = android.widget.RemoteViews(appContext.packageName, R.layout.player_widget)
+
+            views.setTextViewText(R.id.widget_title, prefs.loadTitle().ifBlank { "Reproduciendo" })
+            views.setTextViewText(R.id.widget_artist, prefs.loadArtist())
+            views.setImageViewResource(R.id.widget_music_note, R.drawable.widget_music_note)
+            views.setImageViewResource(
+                R.id.widget_play_pause,
+                if (prefs.loadIsPlaying()) R.drawable.widget_pause else R.drawable.widget_play,
+            )
+            artwork?.let { views.setImageViewBitmap(R.id.widget_album_art, it) }
+                ?: views.setImageViewResource(R.id.widget_album_art, R.drawable.ic_default_album)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                views.setColorStateList(
+                    R.id.widget_root,
+                    "setBackgroundTintList",
+                    ColorStateList.valueOf(primaryColor),
+                )
+            } else {
+                views.setInt(R.id.widget_root, "setBackgroundColor", primaryColor)
+            }
+            views.setOnClickPendingIntent(R.id.widget_root, openAppIntent(appContext))
+            views.setOnClickPendingIntent(R.id.widget_previous, serviceIntent(appContext, MusicService.ACTION_PREV))
+            views.setOnClickPendingIntent(R.id.widget_play_pause, serviceIntent(appContext, MusicService.ACTION_PLAY_PAUSE))
+            views.setOnClickPendingIntent(R.id.widget_next, serviceIntent(appContext, MusicService.ACTION_NEXT))
+
+            ids.forEach { id -> manager.updateAppWidget(id, views) }
         }
-    }
 
-    @Composable
-    private fun WidgetContent(
-        songTitle: String,
-        artist: String,
-        position: Long,
-        isPlaying: Boolean,
-        duration: Long,
-        albumUri: Uri?,
-    ) {
-        Row(
-            modifier = GlanceModifier.fillMaxSize().background(ColorProvider(Color(0xFF1A1A1A), Color(0xFF1A1A1A))).padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Album art
-            albumUri?.let { uri ->
-                Image(
-                    provider = ImageProvider(uri),
-                    contentDescription = "Album art",
-                    modifier = GlanceModifier.size(80.dp),
-                )
+        private fun openAppIntent(context: Context): PendingIntent {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
+            return PendingIntent.getActivity(
+                context,
+                100,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
 
-            // Song info + controls
-            Column(
-                modifier = GlanceModifier.defaultWeight().padding(start = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = songTitle,
-                    style = TextStyle(
-                        color = ColorProvider(Color.White, Color.White),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                    ),
-                    maxLines = 1,
-                )
-                Text(
-                    text = artist,
-                    style = TextStyle(
-                        color = ColorProvider(Color(0xFFAAAAAA), Color(0xFFAAAAAA)),
-                        fontSize = 12.sp,
-                    ),
-                    maxLines = 1,
-                )
+        private fun serviceIntent(context: Context, action: String): PendingIntent {
+            val intent = Intent(context, MusicService::class.java).apply { this.action = action }
+            return PendingIntent.getForegroundService(
+                context,
+                action.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
 
-                LinearProgressIndicator(
-                    progress = if (duration > 0) position.toFloat() / duration.toFloat() else 0f,
-                    modifier = GlanceModifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp),
-                )
+        private fun loadAlbumArt(context: Context, songUri: String): Bitmap? = runCatching {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, Uri.parse(songUri))
+            val embeddedArt = retriever.embeddedPicture
+            retriever.release()
+            embeddedArt?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                ?.let(::scaleAlbumArt)
+                ?.let(::roundedAlbumArt)
+        }.getOrNull()
 
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Button(
-                        text = "⏮",
-                        onClick = actionRunCallback<PrevAction>(),
-                    )
-                    Button(
-                        text = if (isPlaying) "⏸" else "▶",
-                        onClick = actionRunCallback<PlayPauseAction>(),
-                    )
-                    Button(
-                        text = "⏭",
-                        onClick = actionRunCallback<NextAction>(),
-                    )
-                }
+        private fun scaleAlbumArt(source: Bitmap): Bitmap {
+            val maxSide = 256
+            if (source.width <= maxSide && source.height <= maxSide) return source
+            val scale = minOf(maxSide.toFloat() / source.width, maxSide.toFloat() / source.height)
+            return Bitmap.createScaledBitmap(
+                source,
+                (source.width * scale).toInt().coerceAtLeast(1),
+                (source.height * scale).toInt().coerceAtLeast(1),
+                true,
+            )
+        }
+
+        private fun roundedAlbumArt(source: Bitmap): Bitmap {
+            val side = minOf(source.width, source.height)
+            val left = (source.width - side) / 2
+            val top = (source.height - side) / 2
+            val rounded = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(rounded)
+            val path = Path().apply {
+                addRoundRect(RectF(0f, 0f, side.toFloat(), side.toFloat()), side * 0.12f, side * 0.12f, Path.Direction.CW)
             }
+            canvas.save()
+            canvas.clipPath(path)
+            canvas.drawBitmap(source, Rect(left, top, left + side, top + side), RectF(0f, 0f, side.toFloat(), side.toFloat()), null)
+            canvas.restore()
+            return rounded
         }
     }
 }

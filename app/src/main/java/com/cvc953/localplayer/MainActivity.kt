@@ -16,6 +16,7 @@ import com.cvc953.localplayer.preferences.AppPrefs
 import com.cvc953.localplayer.ui.screens.MusicScreen
 import com.cvc953.localplayer.ui.theme.resolvePrimaryColor
 import com.cvc953.localplayer.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
