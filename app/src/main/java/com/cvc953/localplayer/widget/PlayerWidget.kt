@@ -27,13 +27,28 @@ class PlayerWidget {
         suspend fun refresh(context: Context) {
             withContext(Dispatchers.IO) {
                 updateAll(context.applicationContext)
+                updateAllSquare(context.applicationContext)
+            }
+        }
+
+        suspend fun refreshSquare(context: Context) {
+            withContext(Dispatchers.IO) {
+                updateAllSquare(context.applicationContext)
             }
         }
 
         fun updateAll(context: Context) {
+            updateWidget(context, PlayerWidgetReceiver::class.java, R.layout.player_widget)
+        }
+
+        fun updateAllSquare(context: Context) {
+            updateWidget(context, PlayerWidgetSquareReceiver::class.java, R.layout.player_widget_square)
+        }
+
+        private fun updateWidget(context: Context, providerClass: Class<*>, layoutId: Int) {
             val appContext = context.applicationContext
             val manager = AppWidgetManager.getInstance(appContext)
-            val provider = ComponentName(appContext, PlayerWidgetReceiver::class.java)
+            val provider = ComponentName(appContext, providerClass)
             val ids = manager.getAppWidgetIds(provider)
             if (ids.isEmpty()) return
 
@@ -42,11 +57,10 @@ class PlayerWidget {
                 android.graphics.Color.parseColor(prefs.getPrimaryColor())
             }.getOrDefault(0xFF2196F3.toInt())
             val artwork = prefs.loadLastSongUri()?.let { loadAlbumArt(appContext, it) }
-            val views = android.widget.RemoteViews(appContext.packageName, R.layout.player_widget)
+            val views = android.widget.RemoteViews(appContext.packageName, layoutId)
 
             views.setTextViewText(R.id.widget_title, prefs.loadTitle().ifBlank { "Reproduciendo" })
             views.setTextViewText(R.id.widget_artist, prefs.loadArtist())
-            views.setImageViewResource(R.id.widget_music_note, R.drawable.widget_music_note)
             views.setImageViewResource(
                 R.id.widget_play_pause,
                 if (prefs.loadIsPlaying()) R.drawable.widget_pause else R.drawable.widget_play,

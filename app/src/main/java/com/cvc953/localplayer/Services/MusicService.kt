@@ -374,6 +374,7 @@ class MusicService : Service() {
                 saveDuration(durationMs)
             }
             PlayerWidget.refresh(this)
+            PlayerWidget.refreshSquare(this)
         } catch (e: Exception) {
             Log.w("MusicService", "Widget update failed: ${e.message}", e)
         }
