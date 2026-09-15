@@ -1,21 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent" android:padding="10dp" android:background="@drawable/widget_background_square">
 
-    <ImageView
-        android:id="@+id/widget_album_art"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center"
-        android:scaleType="centerCrop"
-        android:contentDescription="@string/album_cover" />
+    <ImageView android:id="@+id/widget_album_art" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_gravity="center" android:scaleType="centerCrop" android:contentDescription="@string/album_cover" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:paddingBottom="12dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom|center_horizontal" android:gravity="center" android:orientation="horizontal" android:paddingBottom="12dp">
 
         <ImageButton android:id="@+id/widget_previous" android:layout_width="42dp" android:layout_height="42dp" android:background="@android:color/transparent" android:contentDescription="Previous" android:src="@drawable/widget_previous" />
 
@@ -24,13 +12,7 @@
         <ImageButton android:id="@+id/widget_next" android:layout_width="42dp" android:layout_height="42dp" android:background="@android:color/transparent" android:contentDescription="Next" android:src="@drawable/widget_next" />
     </LinearLayout>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:paddingBottom="76dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom|center_horizontal" android:gravity="center" android:orientation="vertical" android:paddingBottom="76dp">
 
         <TextView android:id="@+id/widget_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@android:color/white" android:textSize="15sp" android:includeFontPadding="false" android:visibility="gone" />
 
