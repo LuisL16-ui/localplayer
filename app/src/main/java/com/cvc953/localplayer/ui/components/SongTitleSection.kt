@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -129,16 +128,6 @@ fun SongTitleSection(
                             } else {
                                 primaryContentColor.copy(alpha = 0.08f)
                             },
-                        )
-                        .border(
-                            width = 1.dp,
-                            color =
-                                if (isFavorite) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    primaryContentColor.copy(alpha = 0.45f)
-                                },
-                            shape = favoriteShape,
                         ),
             ) {
                 Icon(
