@@ -43,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -196,6 +197,7 @@ fun PlayerScreen(
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var isFavorite by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sleepTimerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     // Use the actual queue order for upcoming songs (after the current song)
     val currentSongIndex = queue.indexOfFirst { it.id == playerState.currentSong?.id }
     val upcoming =
@@ -645,61 +647,105 @@ fun PlayerScreen(
 
             if (showSleepTimerDialog) {
                 val remainingMinutes = sleepTimerRemainingMs?.let { SleepTimer.remainingMinutesFromMs(it).toInt() }
-                AlertDialog(
+                ModalBottomSheet(
                     onDismissRequest = { showSleepTimerDialog = false },
+                    sheetState = sleepTimerSheetState,
                     containerColor = MaterialTheme.colorScheme.surface,
-                    title = {
-                        Text(
-                            text =
-                                if (remainingMinutes != null) {
-                                    stringResource(R.string.sleep_timer_active, remainingMinutes)
-                                } else {
-                                    stringResource(R.string.sleep_timer_title)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Timer,
+                                    contentDescription = stringResource(R.string.sleep_timer_content_description),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.sleep_timer_title),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                                Text(
+                                    text =
+                                        if (remainingMinutes != null) {
+                                            stringResource(R.string.sleep_timer_active, remainingMinutes)
+                                        } else {
+                                            stringResource(R.string.sleep_timer_subtitle)
+                                        },
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(18.dp))
+
+                        listOf(15L, 30L, 45L, 60L).forEach { minutes ->
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .clickable {
+                                            playbackViewModel.startSleepTimer(minutes * 60_000L)
+                                            showSleepTimerDialog = false
+                                        }
+                                        .border(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant,
+                                            shape = RoundedCornerShape(14.dp),
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Timer,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = stringResource(R.string.sleep_timer_option_minutes, minutes),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        if (remainingMinutes != null) {
+                            TextButton(
+                                onClick = {
+                                    playbackViewModel.cancelSleepTimer()
+                                    showSleepTimerDialog = false
                                 },
-                            color = MaterialTheme.colorScheme.onBackground,
-                        )
-                    },
-                    text = {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            listOf(15L, 30L, 45L, 60L).forEach { minutes ->
-                                TextButton(
-                                    onClick = {
-                                        playbackViewModel.startSleepTimer(minutes * 60_000L)
-                                        showSleepTimerDialog = false
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.sleep_timer_option_minutes, minutes),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-                            }
-                            if (remainingMinutes != null) {
-                                TextButton(
-                                    onClick = {
-                                        playbackViewModel.cancelSleepTimer()
-                                        showSleepTimerDialog = false
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.sleep_timer_cancel),
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                }
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.sleep_timer_cancel),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
                             }
                         }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showSleepTimerDialog = false }) {
-                            Text(
-                                text = stringResource(R.string.action_cancel),
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    },
-                )
+                        Spacer(Modifier.navigationBarsPadding())
+                    }
+                }
             }
 
             if (showAddToPlaylistDialog) {

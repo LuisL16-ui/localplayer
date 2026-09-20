@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">localplayer</string>
     <string name="sleep_timer_title">Timer di spegnimento</string>
+    <string name="sleep_timer_subtitle">La musica verrà messa in pausa automaticamente</string>
     <string name="sleep_timer_active">Timer attivo: %1$d min rimanenti</string>
     <string name="sleep_timer_option_minutes">%1$d minuti</string>
     <string name="sleep_timer_cancel">Annulla timer</string>
