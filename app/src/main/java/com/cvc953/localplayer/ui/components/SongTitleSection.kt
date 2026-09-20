@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -114,7 +116,24 @@ fun SongTitleSection(
                 overflow = TextOverflow.Companion.Ellipsis,
                 modifier = Modifier.weight(1f).basicMarquee(),
             )
-            IconButton(onClick = onFavoriteToggle) {
+            val favoriteShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
+            IconButton(
+                onClick = onFavoriteToggle,
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(favoriteShape)
+                        .border(
+                            width = 1.dp,
+                            color =
+                                if (isFavorite) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    primaryContentColor.copy(alpha = 0.45f)
+                                },
+                            shape = favoriteShape,
+                        ),
+            ) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                     contentDescription =
