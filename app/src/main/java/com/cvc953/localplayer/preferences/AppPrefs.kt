@@ -319,6 +319,42 @@ class AppPrefs(
 
     fun loadIsPlaying(): Boolean = prefs.getBoolean("playback_is_playing", false)
 
+    fun saveDuration(durationMs: Long) {
+        prefs.edit().putLong("playback_duration", durationMs).apply()
+    }
+    }
+
+    fun saveSleepTimerDeadline(deadlineEpochMs: Long?) {
+        prefs.edit().apply {
+            if (deadlineEpochMs == null) {
+                remove("sleep_timer_deadline_epoch_ms")
+            } else {
+                putLong("sleep_timer_deadline_epoch_ms", deadlineEpochMs)
+            }
+            apply()
+        }
+    }
+
+    fun loadSleepTimerDeadline(): Long? =
+        if (prefs.contains("sleep_timer_deadline_epoch_ms")) {
+            prefs.getLong("sleep_timer_deadline_epoch_ms", 0L)
+        } else {
+            null
+        }
+
+    fun saveTitle(title: String) {
+        prefs.edit().putString("playback_title", title).apply()
+    }
+
+    fun loadTitle(): String = prefs.getString("playback_title", "Reproduciendo") ?: "Reproduciendo"
+
+    fun saveArtist(artist: String) {
+        prefs.edit().putString("playback_artist", artist).apply()
+    }
+
+    fun loadArtist(): String = prefs.getString("playback_artist", "") ?: ""
+
+>>>>>>> 28b2608 (feat(timer): persist sleep timer deadline)
     fun saveNextAlbum(
         albumName: String?,
         artistName: String?,
