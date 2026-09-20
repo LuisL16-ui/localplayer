@@ -319,6 +319,24 @@ class AppPrefs(
 
     fun loadIsPlaying(): Boolean = prefs.getBoolean("playback_is_playing", false)
 
+    fun saveDuration(durationMs: Long) {
+        prefs.edit().putLong("playback_duration", durationMs).apply()
+    }
+
+    fun loadDuration(): Long = prefs.getLong("playback_duration", 0L)
+
+    fun saveTitle(title: String) {
+        prefs.edit().putString("playback_title", title).apply()
+    }
+
+    fun loadTitle(): String = prefs.getString("playback_title", "Reproduciendo") ?: "Reproduciendo"
+
+    fun saveArtist(artist: String) {
+        prefs.edit().putString("playback_artist", artist).apply()
+    }
+
+    fun loadArtist(): String = prefs.getString("playback_artist", "") ?: ""
+
     fun saveNextAlbum(
         albumName: String?,
         artistName: String?,

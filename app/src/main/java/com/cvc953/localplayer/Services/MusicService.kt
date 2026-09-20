@@ -20,12 +20,17 @@ import androidx.core.app.NotificationCompat
 import androidx.core.graphics.scale
 import com.cvc953.localplayer.MainActivity
 import com.cvc953.localplayer.R
+import androidx.media.session.MediaButtonReceiver
 import com.cvc953.localplayer.controller.PlayerController
+import com.cvc953.localplayer.preferences.AppPrefs
+import com.cvc953.localplayer.widget.PlayerWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlin.math.max
+import kotlin.math.min
 
 class MusicService : Service() {
     companion object {
@@ -35,6 +40,8 @@ class MusicService : Service() {
         const val ACTION_NEXT = "com.cvc953.localplayer.ACTION_NEXT"
         const val ACTION_PREV = "com.cvc953.localplayer.ACTION_PREV"
         const val ACTION_UPDATE_STATE = "com.cvc953.localplayer.ACTION_UPDATE_STATE"
+        const val ACTION_SEEK_BACKWARD = "com.cvc953.localplayer.ACTION_SEEK_BACKWARD"
+        const val ACTION_SEEK_FORWARD = "com.cvc953.localplayer.ACTION_SEEK_FORWARD"
     }
 
     private var title: String = "Reproduciendo"
@@ -52,7 +59,6 @@ class MusicService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-
         createNotificationChannel()
         initMediaSession()
 
@@ -82,7 +88,8 @@ class MusicService : Service() {
                         mediaSession.isActive = true
                         updateMediaSession()
                         updateNotification()
-                        lastUpdateTimeMs = System.currentTimeMillis()
+                        updateWidgetState()
+                         lastUpdateTimeMs = System.currentTimeMillis()
                     } else if (newSong != null) {
                         // Misma canción, solo actualiza estado
                         title = newSong.title.ifBlank { "Reproduciendo" }
@@ -96,6 +103,7 @@ class MusicService : Service() {
                         if (playStateChanged || now - lastUpdateTimeMs >= 1000L) {
                             updateMediaSession()
                             updateNotification()
+                            updateWidgetState()
                             lastUpdateTimeMs = now
                         }
                     } else {
@@ -108,6 +116,7 @@ class MusicService : Service() {
                         if (now - lastUpdateTimeMs >= 1000L) {
                             updateMediaSession()
                             updateNotification()
+                            // Widget state update via GlanceAppWidgetManager (internal API)
                             lastUpdateTimeMs = now
                         }
                     }
@@ -146,6 +155,10 @@ class MusicService : Service() {
                 override fun onSkipToPrevious() {
                     playerController.previous()
                 }
+
+                override fun onSeekTo(pos: Long) {
+                    playerController.seekTo(pos)
+                }
             },
         )
 
@@ -158,19 +171,26 @@ class MusicService : Service() {
         startId: Int,
     ): Int {
 
+        if (intent != null && MediaButtonReceiver.handleIntent(mediaSession, intent) != null) {
+            return START_STICKY
+        }
+
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> {
                 playerController.togglePlayPause()
+                serviceScope.launch { updateWidgetState() }
                 return START_STICKY
             }
 
             ACTION_PREV -> {
                 playerController.previous()
+                serviceScope.launch { updateWidgetState() }
                 return START_STICKY
             }
 
             ACTION_NEXT -> {
                 playerController.next()
+                serviceScope.launch { updateWidgetState() }
                 return START_STICKY
             }
 
@@ -178,8 +198,24 @@ class MusicService : Service() {
                 isPlaying = intent.getBooleanExtra("IS_PLAYING", false)
                 durationMs = intent.getLongExtra("DURATION", durationMs)
                 positionMs = intent.getLongExtra("POSITION", positionMs)
+                intent.getStringExtra("SONG_URI")?.let { currentSongUri = it }
+                intent.getStringExtra("TITLE")?.let { title = it }
+                intent.getStringExtra("ARTIST")?.let { artist = it }
                 updateMediaSession()
                 updateNotification()
+                serviceScope.launch { updateWidgetState() }
+                return START_STICKY
+            }
+
+            ACTION_SEEK_BACKWARD -> {
+                playerController.seekTo(max(0L, positionMs - 10_000))
+                serviceScope.launch { updateWidgetState() }
+                return START_STICKY
+            }
+
+            ACTION_SEEK_FORWARD -> {
+                playerController.seekTo(min(durationMs, positionMs + 10_000))
+                serviceScope.launch { updateWidgetState() }
                 return START_STICKY
             }
         }
@@ -324,6 +360,23 @@ class MusicService : Service() {
             notificationManager.notify(NOTIF_ID, createNotification())
         } catch (e: Exception) {
             Log.e("MusicService", "✗ updateNotification error: ${e.message}", e)
+        }
+    }
+
+    private suspend fun updateWidgetState() {
+        try {
+            AppPrefs(this).apply {
+                saveLastSongUri(currentSongUri.takeIf { it.isNotBlank() })
+                saveTitle(title)
+                saveArtist(artist)
+                saveIsPlaying(isPlaying)
+                savePlaybackPosition(positionMs)
+                saveDuration(durationMs)
+            }
+            PlayerWidget.refresh(this)
+            PlayerWidget.refreshSquare(this)
+        } catch (e: Exception) {
+            Log.w("MusicService", "Widget update failed: ${e.message}", e)
         }
     }
 
