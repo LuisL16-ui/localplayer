@@ -123,6 +123,13 @@ fun SongTitleSection(
                     Modifier
                         .size(48.dp)
                         .clip(favoriteShape)
+                        .background(
+                            if (isFavorite) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                            } else {
+                                primaryContentColor.copy(alpha = 0.08f)
+                            },
+                        )
                         .border(
                             width = 1.dp,
                             color =
