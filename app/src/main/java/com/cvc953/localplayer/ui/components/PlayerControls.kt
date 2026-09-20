@@ -361,15 +361,6 @@ private fun IconButtonsBottomRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        IconButton(onClick = { actions.onFavoriteToggle() }) {
-            Icon(
-                imageVector = if (state.isFavorite) Icons.Rounded.Favorite else Icons.Rounded.Favorite,
-                contentDescription = null,
-                tint = if (state.isFavorite) MaterialTheme.colorScheme.primary else state.primaryContentColor,
-                modifier = Modifier.size(24.dp),
-            )
-        }
-        Spacer(Modifier.width(16.dp))
         IconButton(onClick = { actions.onShowQueue() }) {
             Icon(
                 Icons.AutoMirrored.Filled.QueueMusic,
@@ -527,22 +518,12 @@ private fun LuneBottomRow(
             horizontalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             LunePillSegment(
-                icon = Icons.Rounded.Favorite,
-                tint = if (state.isFavorite) MaterialTheme.colorScheme.primary else state.primaryContentColor,
-                active = state.isFavorite,
-                onClick = actions.onFavoriteToggle,
-                pillRadius = pillRadius,
-                roundLeft = true,
-                roundRight = false,
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-            )
-            LunePillSegment(
                 icon = Icons.AutoMirrored.Filled.QueueMusic,
                 tint = state.primaryContentColor,
                 active = false,
                 onClick = actions.onShowQueue,
                 pillRadius = pillRadius,
-                roundLeft = false,
+                roundLeft = true,
                 roundRight = false,
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )

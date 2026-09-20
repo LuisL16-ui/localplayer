@@ -41,10 +41,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -339,7 +337,6 @@ fun PlayerScreen(
             duration = playerState.duration,
             isShuffle = isShuffle,
             repeatMode = repeatMode,
-            isFavorite = isFavorite,
             audioFormat = audioFormat,
             audioBitrate = audioBitrate,
             audioSampleRate = audioSampleRate,
@@ -348,6 +345,22 @@ fun PlayerScreen(
             metaColor = playerMetaColor,
             dominantColor = dominantColor,
         )
+    val toggleFavorite: () -> Unit = {
+        val f = "Favoritos"
+        if (isFavorite) {
+            playlistViewModel.removeSongFromPlaylist(f, song.id)
+            isFavorite = false
+            Toast.makeText(context, context.getString(R.string.removed_from_favorites), Toast.LENGTH_SHORT).show()
+        } else {
+            val p = playlists.find { it.name == f }
+            if (p == null) {
+                playlistViewModel.createPlaylist(f)
+            }
+            playlistViewModel.addSongToPlaylist(f, song.id)
+            isFavorite = true
+            Toast.makeText(context, context.getString(R.string.added_to_favorites), Toast.LENGTH_SHORT).show()
+        }
+    }
     val controlActions =
         PlayerControlActions(
             onPlayPause = { playbackViewModel.togglePlayPause() },
@@ -358,22 +371,6 @@ fun PlayerScreen(
             onSeekEnd = { },
             onShuffleToggle = { playbackViewModel.toggleShuffle() },
             onRepeatToggle = { playbackViewModel.toggleRepeat() },
-            onFavoriteToggle = {
-                val f = "Favoritos"
-                if (isFavorite) {
-                    playlistViewModel.removeSongFromPlaylist(f, song.id)
-                    isFavorite = false
-                    Toast.makeText(context, context.getString(R.string.removed_from_favorites), Toast.LENGTH_SHORT).show()
-                } else {
-                    val p = playlists.find { it.name == f }
-                    if (p == null) {
-                        playlistViewModel.createPlaylist(f)
-                    }
-                    playlistViewModel.addSongToPlaylist(f, song.id)
-                    isFavorite = true
-                    Toast.makeText(context, context.getString(R.string.added_to_favorites), Toast.LENGTH_SHORT).show()
-                }
-            },
             onShowQueue = { showQueue = true },
             onShowAddToPlaylist = { showAddToPlaylistDialog = true },
             onToggleLyrics = { playerViewModel.toggleLyrics() },
@@ -588,6 +585,8 @@ fun PlayerScreen(
                             albumArt = albumArt,
                             primaryContentColor = playerPrimaryColor,
                             secondaryContentColor = playerSecondaryColor,
+                            isFavorite = isFavorite,
+                            onFavoriteToggle = toggleFavorite,
                             onArtistClick = {
                                 val mainArtist = normalizeArtistName(song.artist).firstOrNull() ?: song.artist
                                 onNavigateToArtist(mainArtist)
@@ -624,6 +623,8 @@ fun PlayerScreen(
                         albumArt = albumArt,
                         primaryContentColor = playerPrimaryColor,
                         secondaryContentColor = playerSecondaryColor,
+                        isFavorite = isFavorite,
+                        onFavoriteToggle = toggleFavorite,
                         onArtistClick = {
                             val mainArtist = normalizeArtistName(song.artist).firstOrNull() ?: song.artist
                             onNavigateToArtist(mainArtist)

@@ -18,8 +18,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -52,6 +55,8 @@ fun SongTitleSection(
     albumArt: Bitmap?,
     primaryContentColor: Color,
     secondaryContentColor: Color,
+    isFavorite: Boolean,
+    onFavoriteToggle: () -> Unit,
     onArtistClick: () -> Unit,
     onAlbumClick: () -> Unit,
 ) {
@@ -94,15 +99,27 @@ fun SongTitleSection(
         modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
         horizontalAlignment = Alignment.Start,
     ) {
-        Text(
-            text = title,
-            color = primaryContentColor,
-            fontSize = titleFontSize,
-            fontWeight = FontWeight.Companion.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Companion.Visible,
-            modifier = Modifier.fillMaxWidth().basicMarquee(),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                color = primaryContentColor,
+                fontSize = titleFontSize,
+                fontWeight = FontWeight.Companion.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Companion.Ellipsis,
+                modifier = Modifier.weight(1f).basicMarquee(),
+            )
+            IconButton(onClick = onFavoriteToggle) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    contentDescription = if (isFavorite) "Quitar de favoritos" else "Añadir a favoritos",
+                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else primaryContentColor,
+                )
+            }
+        }
 
         Spacer(Modifier.height(4.dp))
 
