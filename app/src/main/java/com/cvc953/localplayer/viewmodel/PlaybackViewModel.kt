@@ -29,6 +29,7 @@ class PlaybackViewModel(
     private val startupEqualizerController = EqualizerController(getApplication())
     private var startupLastEqSessionId: Int = 0
     val playerState: StateFlow<PlayerState> = playerController.state
+    val sleepTimerRemainingMs: StateFlow<Long?> = playerController.sleepTimerRemainingMs
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
     private val _error = MutableStateFlow<String?>(null)
@@ -364,6 +365,14 @@ class PlaybackViewModel(
             ContextCompat.startForegroundService(getApplication(), intent)
         } catch (_: Exception) {
         }
+    }
+
+    fun startSleepTimer(durationMs: Long) {
+        playerController.startSleepTimer(durationMs)
+    }
+
+    fun cancelSleepTimer() {
+        playerController.cancelSleepTimer()
     }
 
     private fun prepareAlbumQueueFromSongs(
