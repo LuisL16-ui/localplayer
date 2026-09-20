@@ -392,8 +392,7 @@ class PlayerController(
     }
 
     fun startSleepTimer(durationMs: Long) {
-        require(durationMs > 0L) { "Sleep timer duration must be positive" }
-        scheduleSleepTimer(System.currentTimeMillis() + durationMs)
+        scheduleSleepTimer(SleepTimer.deadlineFrom(System.currentTimeMillis(), durationMs))
     }
 
     fun cancelSleepTimer() {
@@ -418,7 +417,7 @@ class PlayerController(
         sleepTimerJob =
             timerScope.launch {
                 while (true) {
-                    val remainingMs = deadlineEpochMs - System.currentTimeMillis()
+                    val remainingMs = SleepTimer.remainingMs(deadlineEpochMs, System.currentTimeMillis())
                     if (remainingMs <= 0L) {
                         pause()
                         appPrefs.saveSleepTimerDeadline(null)

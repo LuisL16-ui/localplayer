@@ -95,6 +95,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cvc953.localplayer.R
+import com.cvc953.localplayer.controller.SleepTimer
 import com.cvc953.localplayer.model.Song
 import com.cvc953.localplayer.ui.MiniPlayer
 import com.cvc953.localplayer.ui.components.LyricsView
@@ -643,7 +644,7 @@ fun PlayerScreen(
             }
 
             if (showSleepTimerDialog) {
-                val remainingMinutes = sleepTimerRemainingMs?.let { ((it + 59_999L) / 60_000L).toInt() }
+                val remainingMinutes = sleepTimerRemainingMs?.let { SleepTimer.remainingMinutesFromMs(it).toInt() }
                 AlertDialog(
                     onDismissRequest = { showSleepTimerDialog = false },
                     containerColor = MaterialTheme.colorScheme.surface,
