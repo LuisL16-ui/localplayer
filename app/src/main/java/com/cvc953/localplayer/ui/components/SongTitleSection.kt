@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
@@ -40,7 +41,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -115,13 +115,12 @@ fun SongTitleSection(
                 overflow = TextOverflow.Companion.Ellipsis,
                 modifier = Modifier.weight(1f).basicMarquee(),
             )
-            val favoriteShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
             IconButton(
                 onClick = onFavoriteToggle,
                 modifier =
                     Modifier
                         .size(48.dp)
-                        .clip(favoriteShape)
+                        .clip(CircleShape)
                         .background(
                             if (isFavorite) {
                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
