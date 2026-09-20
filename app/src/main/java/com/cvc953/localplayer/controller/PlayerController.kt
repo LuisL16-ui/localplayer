@@ -14,6 +14,8 @@ import com.cvc953.localplayer.ui.PlayerState
 import com.cvc953.localplayer.ui.RepeatMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +40,7 @@ class PlayerController(
     val state: StateFlow<PlayerState> = _state
 
     private var progressJob: Job? = null
+    private var sleepTimerJob: Job? = null
     private var onQueueEnded: (() -> Unit)? = null
     private var onAudioSessionIdChanged: ((Int) -> Unit)? = null
     private var onNextAtEnd: (() -> Unit)? = null
@@ -48,12 +51,20 @@ class PlayerController(
     private var playbackFadeJob: Job? = null
     private var fixedAudioSessionId: Int = 0
     private val appPrefs by lazy { AppPrefs(context.applicationContext) }
+    private val timerScope = scope ?: CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val fallbackEqualizerController by lazy {
         EqualizerController(context.applicationContext as Application)
     }
 
+    private val _sleepTimerRemainingMs = MutableStateFlow<Long?>(null)
+    val sleepTimerRemainingMs: StateFlow<Long?> = _sleepTimerRemainingMs
+
     private val fadeInDurationMs = 140L
     private val fadeInSteps = 7
+
+    init {
+        restoreSleepTimer()
+    }
 
     fun playNow(
         songs: List<Song>,
@@ -372,11 +383,51 @@ class PlayerController(
     }
 
     fun stop() {
+        cancelSleepTimer()
         progressJob?.cancel()
         mediaPlayer?.release()
         mediaPlayer = null
         releaseAudioFocus()
         _state.value = PlayerState()
+    }
+
+    fun startSleepTimer(durationMs: Long) {
+        scheduleSleepTimer(SleepTimer.deadlineFrom(System.currentTimeMillis(), durationMs))
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        _sleepTimerRemainingMs.value = null
+        appPrefs.saveSleepTimerDeadline(null)
+    }
+
+    private fun restoreSleepTimer() {
+        val deadline = appPrefs.loadSleepTimerDeadline() ?: return
+        if (deadline <= System.currentTimeMillis()) {
+            appPrefs.saveSleepTimerDeadline(null)
+            return
+        }
+        scheduleSleepTimer(deadline)
+    }
+
+    private fun scheduleSleepTimer(deadlineEpochMs: Long) {
+        sleepTimerJob?.cancel()
+        appPrefs.saveSleepTimerDeadline(deadlineEpochMs)
+        sleepTimerJob =
+            timerScope.launch {
+                while (true) {
+                    val remainingMs = SleepTimer.remainingMs(deadlineEpochMs, System.currentTimeMillis())
+                    if (remainingMs <= 0L) {
+                        pause()
+                        appPrefs.saveSleepTimerDeadline(null)
+                        _sleepTimerRemainingMs.value = null
+                        break
+                    }
+                    _sleepTimerRemainingMs.value = remainingMs
+                    delay(1000L)
+                }
+            }
     }
 
     fun seekTo(position: Long) {

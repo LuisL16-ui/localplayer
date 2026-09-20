@@ -1,6 +1,14 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">localplayer</string>
+    <string name="sleep_timer_title">Sleep timer</string>
+    <string name="sleep_timer_subtitle">Music will pause automatically</string>
+    <string name="sleep_timer_active">Sleep timer active: %1$d min remaining</string>
+    <string name="sleep_timer_option_minutes">%1$d minutes</string>
+    <string name="sleep_timer_cancel">Cancel timer</string>
+    <string name="sleep_timer_content_description">Sleep timer</string>
+    <string name="add_to_favorites">Add to favorites</string>
+    <string name="remove_from_favorites">Remove from favorites</string>
 
     <string name="albums_title">Albums</string>
     <string name="scanning_songs">Scanning songs</string>
@@ -24,7 +32,7 @@
     <string name="action_add_to_queue_end">Add to end</string>
     <string name="toast_press_back_again">Press back again to exit</string>
     <string name="songs_count">%1$d songs</string>
-    
+
     <string name="preset_activo">Active preset</string>
     <string name="cambiar">Change</string>
     <string name="eliminar_preset">Delete preset</string>
@@ -191,7 +199,7 @@
     <string name="about_footer">© 2026 Local Player. All rights reserved.</string>
     <string name="nav_back">Back</string>
 
-    
+
     <string name="lyrics_not_available">No lyrics available for this song</string>
     <string name="favorites">Favorites</string>
     <string name="removed_from_favorites">Removed from Favorites</string>

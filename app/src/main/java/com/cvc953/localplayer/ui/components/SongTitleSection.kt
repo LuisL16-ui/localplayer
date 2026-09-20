@@ -15,11 +15,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -36,10 +40,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cvc953.localplayer.R
 import com.cvc953.localplayer.ui.theme.LocalExtendedColors
 
 @Suppress("ktlint:standard:function-naming")
@@ -52,6 +58,8 @@ fun SongTitleSection(
     albumArt: Bitmap?,
     primaryContentColor: Color,
     secondaryContentColor: Color,
+    isFavorite: Boolean,
+    onFavoriteToggle: () -> Unit,
     onArtistClick: () -> Unit,
     onAlbumClick: () -> Unit,
 ) {
@@ -94,15 +102,43 @@ fun SongTitleSection(
         modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
         horizontalAlignment = Alignment.Start,
     ) {
-        Text(
-            text = title,
-            color = primaryContentColor,
-            fontSize = titleFontSize,
-            fontWeight = FontWeight.Companion.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Companion.Visible,
-            modifier = Modifier.fillMaxWidth().basicMarquee(),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                color = primaryContentColor,
+                fontSize = titleFontSize,
+                fontWeight = FontWeight.Companion.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Companion.Ellipsis,
+                modifier = Modifier.weight(1f).basicMarquee(),
+            )
+            IconButton(
+                onClick = onFavoriteToggle,
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isFavorite) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                            } else {
+                                primaryContentColor.copy(alpha = 0.08f)
+                            },
+                        ),
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    contentDescription =
+                        stringResource(
+                            if (isFavorite) R.string.remove_from_favorites else R.string.add_to_favorites,
+                        ),
+                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else primaryContentColor,
+                )
+            }
+        }
 
         Spacer(Modifier.height(4.dp))
 

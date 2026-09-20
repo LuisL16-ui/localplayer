@@ -323,6 +323,24 @@ class AppPrefs(
         prefs.edit().putLong("playback_duration", durationMs).apply()
     }
 
+    fun saveSleepTimerDeadline(deadlineEpochMs: Long?) {
+        prefs.edit().apply {
+            if (deadlineEpochMs == null) {
+                remove("sleep_timer_deadline_epoch_ms")
+            } else {
+                putLong("sleep_timer_deadline_epoch_ms", deadlineEpochMs)
+            }
+            apply()
+        }
+    }
+
+    fun loadSleepTimerDeadline(): Long? =
+        if (prefs.contains("sleep_timer_deadline_epoch_ms")) {
+            prefs.getLong("sleep_timer_deadline_epoch_ms", 0L)
+        } else {
+            null
+        }
+
     fun loadDuration(): Long = prefs.getLong("playback_duration", 0L)
 
     fun saveTitle(title: String) {

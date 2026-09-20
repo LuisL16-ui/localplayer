@@ -41,10 +41,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -97,6 +96,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cvc953.localplayer.R
+import com.cvc953.localplayer.controller.SleepTimer
 import com.cvc953.localplayer.model.Song
 import com.cvc953.localplayer.ui.MiniPlayer
 import com.cvc953.localplayer.ui.components.LyricsView
@@ -144,6 +144,7 @@ fun PlayerScreen(
 ) {
     val showLyrics by playerViewModel.showLyrics.collectAsState()
     val playerState by playbackViewModel.playerState.collectAsState()
+    val sleepTimerRemainingMs by playbackViewModel.sleepTimerRemainingMs.collectAsState()
     val queue by playbackViewModel.queue.collectAsState()
     val songs by songViewModel.songs.collectAsState()
     val playlists by playlistViewModel.playlists.collectAsState()
@@ -190,11 +191,13 @@ fun PlayerScreen(
     var albumArt by remember { mutableStateOf<Bitmap?>(null) }
     var dominantColor by remember { mutableStateOf(Color.Black) }
     var showQueue by remember { mutableStateOf(false) }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var isFavorite by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sleepTimerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     // Use the actual queue order for upcoming songs (after the current song)
     val currentSongIndex = queue.indexOfFirst { it.id == playerState.currentSong?.id }
     val upcoming =
@@ -339,7 +342,7 @@ fun PlayerScreen(
             duration = playerState.duration,
             isShuffle = isShuffle,
             repeatMode = repeatMode,
-            isFavorite = isFavorite,
+            isSleepTimerActive = sleepTimerRemainingMs != null,
             audioFormat = audioFormat,
             audioBitrate = audioBitrate,
             audioSampleRate = audioSampleRate,
@@ -348,6 +351,22 @@ fun PlayerScreen(
             metaColor = playerMetaColor,
             dominantColor = dominantColor,
         )
+    val toggleFavorite: () -> Unit = {
+        val f = "Favoritos"
+        if (isFavorite) {
+            playlistViewModel.removeSongFromPlaylist(f, song.id)
+            isFavorite = false
+            Toast.makeText(context, context.getString(R.string.removed_from_favorites), Toast.LENGTH_SHORT).show()
+        } else {
+            val p = playlists.find { it.name == f }
+            if (p == null) {
+                playlistViewModel.createPlaylist(f)
+            }
+            playlistViewModel.addSongToPlaylist(f, song.id)
+            isFavorite = true
+            Toast.makeText(context, context.getString(R.string.added_to_favorites), Toast.LENGTH_SHORT).show()
+        }
+    }
     val controlActions =
         PlayerControlActions(
             onPlayPause = { playbackViewModel.togglePlayPause() },
@@ -358,22 +377,7 @@ fun PlayerScreen(
             onSeekEnd = { },
             onShuffleToggle = { playbackViewModel.toggleShuffle() },
             onRepeatToggle = { playbackViewModel.toggleRepeat() },
-            onFavoriteToggle = {
-                val f = "Favoritos"
-                if (isFavorite) {
-                    playlistViewModel.removeSongFromPlaylist(f, song.id)
-                    isFavorite = false
-                    Toast.makeText(context, context.getString(R.string.removed_from_favorites), Toast.LENGTH_SHORT).show()
-                } else {
-                    val p = playlists.find { it.name == f }
-                    if (p == null) {
-                        playlistViewModel.createPlaylist(f)
-                    }
-                    playlistViewModel.addSongToPlaylist(f, song.id)
-                    isFavorite = true
-                    Toast.makeText(context, context.getString(R.string.added_to_favorites), Toast.LENGTH_SHORT).show()
-                }
-            },
+            onSleepTimerClick = { showSleepTimerDialog = true },
             onShowQueue = { showQueue = true },
             onShowAddToPlaylist = { showAddToPlaylistDialog = true },
             onToggleLyrics = { playerViewModel.toggleLyrics() },
@@ -588,6 +592,8 @@ fun PlayerScreen(
                             albumArt = albumArt,
                             primaryContentColor = playerPrimaryColor,
                             secondaryContentColor = playerSecondaryColor,
+                            isFavorite = isFavorite,
+                            onFavoriteToggle = toggleFavorite,
                             onArtistClick = {
                                 val mainArtist = normalizeArtistName(song.artist).firstOrNull() ?: song.artist
                                 onNavigateToArtist(mainArtist)
@@ -624,6 +630,8 @@ fun PlayerScreen(
                         albumArt = albumArt,
                         primaryContentColor = playerPrimaryColor,
                         secondaryContentColor = playerSecondaryColor,
+                        isFavorite = isFavorite,
+                        onFavoriteToggle = toggleFavorite,
                         onArtistClick = {
                             val mainArtist = normalizeArtistName(song.artist).firstOrNull() ?: song.artist
                             onNavigateToArtist(mainArtist)
@@ -634,6 +642,109 @@ fun PlayerScreen(
                     PlayerControlsContent(config = config, state = controlState, actions = controlActions)
 
                     Spacer(Modifier.weight(1f))
+                }
+            }
+
+            if (showSleepTimerDialog) {
+                val remainingMinutes = sleepTimerRemainingMs?.let { SleepTimer.remainingMinutesFromMs(it).toInt() }
+                ModalBottomSheet(
+                    onDismissRequest = { showSleepTimerDialog = false },
+                    sheetState = sleepTimerSheetState,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Timer,
+                                    contentDescription = stringResource(R.string.sleep_timer_content_description),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.sleep_timer_title),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                                Text(
+                                    text =
+                                        if (remainingMinutes != null) {
+                                            stringResource(R.string.sleep_timer_active, remainingMinutes)
+                                        } else {
+                                            stringResource(R.string.sleep_timer_subtitle)
+                                        },
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(18.dp))
+
+                        listOf(15L, 30L, 45L, 60L).forEach { minutes ->
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .clickable {
+                                            playbackViewModel.startSleepTimer(minutes * 60_000L)
+                                            showSleepTimerDialog = false
+                                        }
+                                        .border(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant,
+                                            shape = RoundedCornerShape(14.dp),
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Timer,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = stringResource(R.string.sleep_timer_option_minutes, minutes),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        if (remainingMinutes != null) {
+                            TextButton(
+                                onClick = {
+                                    playbackViewModel.cancelSleepTimer()
+                                    showSleepTimerDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.sleep_timer_cancel),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.navigationBarsPadding())
+                    }
                 }
             }
 
