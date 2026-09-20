@@ -6,6 +6,8 @@
     <string name="sleep_timer_option_minutes">%1$d minutos</string>
     <string name="sleep_timer_cancel">Cancelar temporizador</string>
     <string name="sleep_timer_content_description">Temporizador de apagado</string>
+    <string name="add_to_favorites">Añadir a favoritos</string>
+    <string name="remove_from_favorites">Quitar de favoritos</string>
 
     <string name="albums_title">Álbumes</string>
     <string name="scanning_songs">Escaneando canciones</string>

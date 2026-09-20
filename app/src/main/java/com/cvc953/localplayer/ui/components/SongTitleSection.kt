@@ -39,10 +39,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cvc953.localplayer.R
 import com.cvc953.localplayer.ui.theme.LocalExtendedColors
 
 @Suppress("ktlint:standard:function-naming")
@@ -115,7 +117,10 @@ fun SongTitleSection(
             IconButton(onClick = onFavoriteToggle) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                    contentDescription = if (isFavorite) "Quitar de favoritos" else "Añadir a favoritos",
+                    contentDescription =
+                        stringResource(
+                            if (isFavorite) R.string.remove_from_favorites else R.string.add_to_favorites,
+                        ),
                     tint = if (isFavorite) MaterialTheme.colorScheme.primary else primaryContentColor,
                 )
             }
