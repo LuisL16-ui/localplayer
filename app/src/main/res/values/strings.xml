@@ -186,6 +186,7 @@
     <string name="about_privacy_text_3">No se envía información a servidores externos.</string>
     <string name="about_footer">© 2026 Local Player. Todos los derechos reservados.</string>
     <string name="nav_back">Atrás</string>
+    <string name="widget_label">Reproductor</string>
 
 
     <string name="lyrics_not_available">No hay letras para esta canción</string>

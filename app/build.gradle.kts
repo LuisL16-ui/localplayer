@@ -6,6 +6,9 @@ plugins {
 android {
     namespace = "com.cvc953.localplayer"
     compileSdk = 36
+        composeOptions {
+            kotlinCompilerExtensionVersion = libs.versions.kotlinCompilerExtensionVersion.get()
+        }
 
     dependenciesInfo {
         // Desactiva la inclusión de metadatos de dependencias en el APK
@@ -91,6 +94,19 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // Glance AppWidget
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
+
+    // Glance testing
+    androidTestImplementation(libs.glance.testing)
+
+    // Mocking for unit tests
+    testImplementation(libs.mockk)
+    testImplementation(libs.mockkandroid)
+    androidTestImplementation(libs.mockk)
+    androidTestImplementation(libs.mockkandroid)
 
     // Third-party
     implementation("io.coil-kt:coil-compose:2.6.0")

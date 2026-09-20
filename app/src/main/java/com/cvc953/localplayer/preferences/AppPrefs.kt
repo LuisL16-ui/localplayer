@@ -341,6 +341,8 @@ class AppPrefs(
             null
         }
 
+    fun loadDuration(): Long = prefs.getLong("playback_duration", 0L)
+
     fun saveTitle(title: String) {
         prefs.edit().putString("playback_title", title).apply()
     }
