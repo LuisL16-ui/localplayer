@@ -14,7 +14,7 @@ import com.cvc953.localplayer.ui.PlayerState
 import com.cvc953.localplayer.ui.RepeatMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
