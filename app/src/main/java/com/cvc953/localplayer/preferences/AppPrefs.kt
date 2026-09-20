@@ -322,7 +322,6 @@ class AppPrefs(
     fun saveDuration(durationMs: Long) {
         prefs.edit().putLong("playback_duration", durationMs).apply()
     }
-    }
 
     fun saveSleepTimerDeadline(deadlineEpochMs: Long?) {
         prefs.edit().apply {
@@ -354,7 +353,6 @@ class AppPrefs(
 
     fun loadArtist(): String = prefs.getString("playback_artist", "") ?: ""
 
->>>>>>> 28b2608 (feat(timer): persist sleep timer deadline)
     fun saveNextAlbum(
         albumName: String?,
         artistName: String?,
