@@ -1,6 +1,11 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">localplayer</string>
+    <string name="sleep_timer_title">Temporizador de apagado</string>
+    <string name="sleep_timer_active">Temporizador activo: quedan %1$d min</string>
+    <string name="sleep_timer_option_minutes">%1$d minutos</string>
+    <string name="sleep_timer_cancel">Cancelar temporizador</string>
+    <string name="sleep_timer_content_description">Temporizador de apagado</string>
 
     <string name="albums_title">Álbumes</string>
     <string name="scanning_songs">Escaneando canciones</string>

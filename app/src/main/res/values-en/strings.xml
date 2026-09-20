@@ -1,6 +1,11 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">localplayer</string>
+    <string name="sleep_timer_title">Sleep timer</string>
+    <string name="sleep_timer_active">Sleep timer active: %1$d min remaining</string>
+    <string name="sleep_timer_option_minutes">%1$d minutes</string>
+    <string name="sleep_timer_cancel">Cancel timer</string>
+    <string name="sleep_timer_content_description">Sleep timer</string>
 
     <string name="albums_title">Albums</string>
     <string name="scanning_songs">Scanning songs</string>

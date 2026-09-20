@@ -142,6 +142,7 @@ fun PlayerScreen(
 ) {
     val showLyrics by playerViewModel.showLyrics.collectAsState()
     val playerState by playbackViewModel.playerState.collectAsState()
+    val sleepTimerRemainingMs by playbackViewModel.sleepTimerRemainingMs.collectAsState()
     val queue by playbackViewModel.queue.collectAsState()
     val songs by songViewModel.songs.collectAsState()
     val playlists by playlistViewModel.playlists.collectAsState()
@@ -188,6 +189,7 @@ fun PlayerScreen(
     var albumArt by remember { mutableStateOf<Bitmap?>(null) }
     var dominantColor by remember { mutableStateOf(Color.Black) }
     var showQueue by remember { mutableStateOf(false) }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
@@ -337,6 +339,7 @@ fun PlayerScreen(
             duration = playerState.duration,
             isShuffle = isShuffle,
             repeatMode = repeatMode,
+            isSleepTimerActive = sleepTimerRemainingMs != null,
             audioFormat = audioFormat,
             audioBitrate = audioBitrate,
             audioSampleRate = audioSampleRate,
@@ -371,6 +374,7 @@ fun PlayerScreen(
             onSeekEnd = { },
             onShuffleToggle = { playbackViewModel.toggleShuffle() },
             onRepeatToggle = { playbackViewModel.toggleRepeat() },
+            onSleepTimerClick = { showSleepTimerDialog = true },
             onShowQueue = { showQueue = true },
             onShowAddToPlaylist = { showAddToPlaylistDialog = true },
             onToggleLyrics = { playerViewModel.toggleLyrics() },
@@ -636,6 +640,65 @@ fun PlayerScreen(
 
                     Spacer(Modifier.weight(1f))
                 }
+            }
+
+            if (showSleepTimerDialog) {
+                val remainingMinutes = sleepTimerRemainingMs?.let { ((it + 59_999L) / 60_000L).toInt() }
+                AlertDialog(
+                    onDismissRequest = { showSleepTimerDialog = false },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    title = {
+                        Text(
+                            text =
+                                if (remainingMinutes != null) {
+                                    stringResource(R.string.sleep_timer_active, remainingMinutes)
+                                } else {
+                                    stringResource(R.string.sleep_timer_title)
+                                },
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                    },
+                    text = {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            listOf(15L, 30L, 45L, 60L).forEach { minutes ->
+                                TextButton(
+                                    onClick = {
+                                        playbackViewModel.startSleepTimer(minutes * 60_000L)
+                                        showSleepTimerDialog = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.sleep_timer_option_minutes, minutes),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                            }
+                            if (remainingMinutes != null) {
+                                TextButton(
+                                    onClick = {
+                                        playbackViewModel.cancelSleepTimer()
+                                        showSleepTimerDialog = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.sleep_timer_cancel),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showSleepTimerDialog = false }) {
+                            Text(
+                                text = stringResource(R.string.action_cancel),
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    },
+                )
             }
 
             if (showAddToPlaylistDialog) {
