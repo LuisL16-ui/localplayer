@@ -133,13 +133,9 @@ fun MusicScreen(audioFileUri: String? = null, onOpenPlayer: () -> Unit) {
         onFolderSelected = { uri ->
             folderViewModel.addMusicFolder(uri)
             songViewModel.manualRefreshLibrary()
-            albumViewModel.loadAlbums()
-            artistViewModel.loadArtists()
         },
         onSetupCompleted = {
             songViewModel.manualRefreshLibrary()
-            albumViewModel.loadAlbums()
-            artistViewModel.loadArtists()
         },
     ) {
         val navController = rememberNavController()

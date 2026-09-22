@@ -12,6 +12,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cvc953.localplayer.model.SongRepository
 import com.cvc953.localplayer.preferences.AppPrefs
 import com.cvc953.localplayer.ui.screens.MusicScreen
 import com.cvc953.localplayer.ui.theme.resolvePrimaryColor
@@ -58,6 +59,11 @@ class MainActivity : ComponentActivity() {
                 MusicScreen(audioFileUri = audioFileUri) { }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        SongRepository.getInstance(this).onAppForegrounded()
     }
 
     private fun applyLanguagePreference() {

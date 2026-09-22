@@ -1,10 +1,11 @@
 package com.cvc953.localplayer.preferences
 
 import android.content.Context
+import com.cvc953.localplayer.model.LibraryPreferences
 
 class AppPrefs(
     context: Context,
-) {
+) : LibraryPreferences {
     // Playlist order preference (per playlist)
     fun getPlaylistOrder(playlistName: String): String = prefs.getString("playlist_order_$playlistName", "PLAYLIST") ?: "PLAYLIST"
 
@@ -21,10 +22,19 @@ class AppPrefs(
             Context.MODE_PRIVATE,
         )
 
-    fun isFirstScanDone(): Boolean = prefs.getBoolean("first_scan_done", false)
+    override fun isFirstScanDone(): Boolean = prefs.getBoolean("first_scan_done", false)
 
-    fun setFirstScanDone() {
+    override fun setFirstScanDone() {
         prefs.edit().putBoolean("first_scan_done", true).apply()
+    }
+
+    override fun getLibrarySignature(): String? = prefs.getString("library_signature", null)
+
+    override fun setLibrarySignature(raw: String?) {
+        prefs.edit().apply {
+            if (raw == null) remove("library_signature") else putString("library_signature", raw)
+            apply()
+        }
     }
 
     fun getMusicFolderUri(): String? = prefs.getString("music_folder_uri", null)
@@ -41,7 +51,7 @@ class AppPrefs(
 
     fun hasMusicFolderUri(): Boolean = getMusicFolderUri() != null
 
-    fun getMusicFolderUris(): List<String> {
+    override fun getMusicFolderUris(): List<String> {
         val raw = prefs.getString("music_folder_uris", null) ?: return getMusicFolderUri()?.let { listOf(it) } ?: emptyList()
         return try {
             val arr = org.json.JSONArray(raw)
@@ -150,7 +160,7 @@ class AppPrefs(
     }
 
     // Auto-scan preference: whether app should scan automatically when folders change or on startup
-    fun isAutoScanEnabled(): Boolean = prefs.getBoolean("auto_scan_enabled", true)
+    override fun isAutoScanEnabled(): Boolean = prefs.getBoolean("auto_scan_enabled", true)
 
     fun setAutoScanEnabled(enabled: Boolean) {
         prefs.edit().putBoolean("auto_scan_enabled", enabled).apply()

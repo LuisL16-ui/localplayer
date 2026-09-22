@@ -76,7 +76,7 @@ class PlaybackViewModel(
         try {
             val repo =
                 com.cvc953.localplayer.model
-                    .SongRepository(getApplication())
+                    .SongRepository.getInstance(getApplication())
             val allSongs = repo.loadSongs()
 
             // Restore next album info
@@ -269,7 +269,7 @@ class PlaybackViewModel(
             try {
                 val repo =
                     com.cvc953.localplayer.model
-                        .SongRepository(getApplication())
+                        .SongRepository.getInstance(getApplication())
                 val allSongs = repo.loadSongs()
                 if (allSongs.isNotEmpty()) {
                     val shuffled = allSongs.shuffled()
@@ -297,7 +297,7 @@ class PlaybackViewModel(
             try {
                 val repo =
                     com.cvc953.localplayer.model
-                        .SongRepository(getApplication())
+                        .SongRepository.getInstance(getApplication())
                 val allSongs = repo.loadSongs()
                 if (allSongs.isNotEmpty()) {
                     val sorted = allSongs.sortedBy { it.title.lowercase() }
@@ -450,7 +450,7 @@ class PlaybackViewModel(
                 try {
                     val repo =
                         com.cvc953.localplayer.model
-                            .SongRepository(getApplication())
+                            .SongRepository.getInstance(getApplication())
                     val allSongs = repo.loadSongs()
                     val (fullQueue, nextAlbum) = prepareAlbumQueueFromSongs(allSongs, albumName, artistName)
 
@@ -544,7 +544,7 @@ class PlaybackViewModel(
                 try {
                     val repo =
                         com.cvc953.localplayer.model
-                            .SongRepository(getApplication())
+                            .SongRepository.getInstance(getApplication())
                     val allSongs = repo.loadSongs()
                     val sourceSongs = allSongs.ifEmpty { songs }
                     val (fullQueue, nextArtist) = prepareArtistQueueFromSongs(sourceSongs, artistName)
@@ -571,7 +571,7 @@ class PlaybackViewModel(
             try {
                 val repo =
                     com.cvc953.localplayer.model
-                        .SongRepository(getApplication())
+                        .SongRepository.getInstance(getApplication())
                 val allSongs = repo.loadSongs()
 
                 // Get all songs from the next album

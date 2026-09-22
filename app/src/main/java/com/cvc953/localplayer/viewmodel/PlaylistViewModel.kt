@@ -23,9 +23,14 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning
 
-    private val songRepository = com.cvc953.localplayer.model.SongRepository(application)
-    private val _songs = MutableStateFlow<List<Song>>(songRepository.loadSongs())
-    val songs: StateFlow<List<Song>> = _songs
+    private val songRepository = com.cvc953.localplayer.model.SongRepository.getInstance(application)
+
+    val songs: StateFlow<List<Song>> = songRepository.songs
+
+    init {
+        songRepository.loadSongs()
+        songRepository.ensureLoadedAsync()
+    }
 
     fun addSongToPlaylist(playlistName: String, songId: Long) {
         _playlists.value = controller.addSongToPlaylist(_playlists.value, playlistName, songId)

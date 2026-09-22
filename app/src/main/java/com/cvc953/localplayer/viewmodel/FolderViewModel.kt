@@ -20,7 +20,7 @@ data class FolderEntry(
 
 class FolderViewModel(application: Application) : AndroidViewModel(application) {
     private val appPrefs = AppPrefs(application)
-    private val repository = SongRepository(application)
+    private val repository = SongRepository.getInstance(application)
 
     private val _folderUris = MutableStateFlow(appPrefs.getMusicFolderUris())
     val folderUris: StateFlow<List<String>> = _folderUris
@@ -70,11 +70,13 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         appPrefs.addMusicFolder(uri)
         _folderUris.value = appPrefs.getMusicFolderUris()
         refreshFolderEntries()
+        repository.invalidateCache()
     }
 
     fun removeMusicFolder(uri: String) {
         appPrefs.removeMusicFolder(uri)
         _folderUris.value = appPrefs.getMusicFolderUris()
         refreshFolderEntries()
+        repository.invalidateCache()
     }
 }

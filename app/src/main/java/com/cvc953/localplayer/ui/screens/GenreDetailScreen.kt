@@ -22,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,7 +37,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cvc953.localplayer.R
-import com.cvc953.localplayer.model.SongRepository
 import com.cvc953.localplayer.ui.SongItem
 import com.cvc953.localplayer.ui.components.DraggableSwipeRow
 import com.cvc953.localplayer.ui.components.NativeSearchBar
@@ -53,8 +53,7 @@ fun GenreDetailScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val repo = remember { SongRepository(context) }
-    val allSongs = remember { repo.loadSongs() }
+    val allSongs by songViewModel.songs.collectAsState()
     val genreSongs =
         remember(allSongs, genreName) {
             allSongs.filter { song ->

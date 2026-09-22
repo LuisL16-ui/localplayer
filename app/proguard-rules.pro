@@ -9,6 +9,21 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
+
+-keep class com.cvc953.localplayer.** { *; }
+
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+-keep class androidx.glance.** { *; }
+-dontwarn androidx.glance.**
+
+-keep class androidx.media.** { *; }
+-dontwarn androidx.media.**
+
 # Jetpack Compose
 -keep class androidx.compose.** { *; }
 -dontwarn androidx.compose.**

@@ -7,38 +7,59 @@ import androidx.lifecycle.viewModelScope
 import com.cvc953.localplayer.controller.ArtistController
 import com.cvc953.localplayer.model.Artist
 import com.cvc953.localplayer.model.Song
-import kotlinx.coroutines.Dispatchers
+import com.cvc953.localplayer.model.SongRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 class ArtistViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
-    private val _artistSongs = MutableStateFlow<List<Song>>(emptyList())
-
-    fun getSongsForArtist(artistName: String): StateFlow<List<Song>> {
-        viewModelScope.launch(Dispatchers.IO) {
-            val allSongs =
-                com.cvc953.localplayer.model
-                    .SongRepository(getApplication())
-                    .loadSongs()
-            _artistSongs.value = allSongs.filter { it.artist.equals(artistName, ignoreCase = true) }
-        }
-        return _artistSongs
-    }
-
     private val controller = ArtistController(getApplication())
-    private val _artists = MutableStateFlow<List<Artist>>(emptyList())
-    val artists: StateFlow<List<Artist>> = _artists
+    private val repository = SongRepository.getInstance(getApplication())
+
+    val artists: StateFlow<List<Artist>> =
+        repository.songs
+            .map { controller.getAllArtists() }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, controller.getAllArtists())
+
     private val _selectedArtist = MutableStateFlow<Artist?>(null)
     val selectedArtist: StateFlow<Artist?> = _selectedArtist
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
-    private val _songs = MutableStateFlow<List<Song>>(emptyList())
-    val songs: StateFlow<List<Song>> = _songs
+
+    private val _requestedArtist = MutableStateFlow<String?>(null)
+
+    private val _artistSongs =
+        combine(repository.songs, _requestedArtist) { library, artist ->
+            if (artist == null) {
+                emptyList()
+            } else {
+                library.filter { it.artist.equals(artist, ignoreCase = true) }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    init {
+        repository.ensureLoadedAsync()
+    }
+
+    fun getSongsForArtist(artistName: String): StateFlow<List<Song>> {
+        _requestedArtist.value = artistName
+        return _artistSongs
+    }
+
+    fun selectArtist(artist: Artist) {
+        _selectedArtist.value = artist
+    }
+
+    fun clearSelection() {
+        _selectedArtist.value = null
+    }
 
     // Persistent grid/list view preference
     private val prefs = application.getSharedPreferences("music_prefs", Context.MODE_PRIVATE)
@@ -48,47 +69,5 @@ class ArtistViewModel(
 
     fun setGridViewPreferred(value: Boolean) {
         prefs.edit().putBoolean(PREF_VIEW_AS_GRID, value).apply()
-    }
-
-    init {
-        loadArtists()
-    }
-
-    fun loadArtists() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _isLoading.value = true
-            _error.value = null
-            try {
-                _artists.value = controller.getAllArtists()
-            } catch (e: Exception) {
-                _artists.value = emptyList()
-                _error.value = "Error cargando artistas: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
-    fun searchArtists(query: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _isLoading.value = true
-            _error.value = null
-            try {
-                _artists.value = controller.searchArtists(query)
-            } catch (e: Exception) {
-                _artists.value = emptyList()
-                _error.value = "Error buscando artistas: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
-    fun selectArtist(artist: Artist) {
-        _selectedArtist.value = artist
-    }
-
-    fun clearSelection() {
-        _selectedArtist.value = null
     }
 }

@@ -1,671 +1,323 @@
-
 package com.cvc953.localplayer.model
 
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.database.ContentObserver
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
-import android.provider.DocumentsContract
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
-import android.media.MediaScannerConnection
 import android.util.Log
 import com.cvc953.localplayer.preferences.AppPrefs
 import com.cvc953.localplayer.util.TagWriteInput
 import com.cvc953.localplayer.util.TagWriteResult
 import com.cvc953.localplayer.util.TagWriter
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
-class SongRepository(
+/**
+ * singleton app-scoped state
+ */
+class SongRepository internal constructor(
     private val context: Context,
+    private val prefs: LibraryPreferences,
+    private val dataSource: LibraryDataSource,
+    private val cacheStore: SongsCacheStore,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val uriFactory: (String) -> Uri = { Uri.parse(it) },
 ) {
-    private val prefs = AppPrefs(context)
+    companion object {
+        private const val TAG = "SongRepository"
+        private const val AUTO_REFRESH_DEBOUNCE_MS = 1_500L
 
-    /**
-     * Lista de rutas que deben ser excluidas del escaneo. Esto incluye directorios de apps de
-     * mensajería, notificaciones del sistema, tonos, alarmas, efectos de sonido y otras apps que
-     * almacenan audio pero que no son canciones de música.
-     */
-    private fun isExcludedPath(filePath: String?): Boolean {
-        if (filePath == null) return false
+        @Volatile
+        private var instance: SongRepository? = null
 
-        val excludedPaths =
-            listOf(
-                // Apps de mensajería y redes sociales
-                "/WhatsApp/",
-                "/Snapchat/",
-                "/TikTok/",
-                "/Instagram/",
-                "/facebook/",
-                "/Discord/",
-                "/Viber/",
-                "/Signal/",
-                "/Skype/",
-                "/Messenger/",
-                "/.telegram/",
-                "/Android/data/com.whatsapp/",
-                "/Android/data/com.telegram/",
-                "/Android/data/com.snapchat/",
-                "/Android/data/com.tiktok/",
-                "/Android/data/com.instagram/",
-                "/Android/data/com.facebook/",
-                "/Android/data/com.discord/",
-                "/Android/data/com.viber/",
-                "/Android/data/org.signal/",
-                "/Android/data/com.skype/",
-                "/Android/data/com.facebook.orca/",
-                "/Android/media/com.whatsapp/",
-                "/Android/media/com.telegram/",
-                "/Android/media/com.snapchat/",
-                "/Android/media/com.tiktok/",
-                "/Android/media/com.instagram/",
-                "/Android/media/com.facebook/",
-                "/Android/media/com.discord/",
-                "/Android/media/com.viber/",
-                "/Android/media/org.signal/",
-                "/Android/media/com.skype/",
-                "/Android/media/com.facebook.orca/",
-                // Directorios del sistema (notificaciones, tonos, alarmas)
-                "/Notifications/",
-                "/Ringtones/",
-                "/Alarms/",
-                "/UI/",
-                "/system/media/audio/notifications/",
-                "/system/media/audio/ringtones/",
-                "/system/media/audio/alarms/",
-                "/system/media/audio/ui/",
-                // Grabaciones de voz y llamadas
-                "/Recordings/",
-                "/Voice Recorder/",
-                "/Call Recording/",
-                "/Call Recordings/",
-                "/Voice/",
-                "/Sounds/",
-                "/AudioRecorder/",
-                // Directorios de apps de juegos (suelen tener .ogg como efectos)
-                "/Android/obb/",
-                "/Android/data/com.game",
-                "/Android/data/com.unity",
-                "/game_data/",
-                "/assets/sounds/",
-                "/assets/audio/",
-            )
-
-        return excludedPaths.any { filePath.contains(it, ignoreCase = true) }
+        fun getInstance(context: Context): SongRepository {
+            val appContext = context.applicationContext
+            return instance ?: synchronized(this) {
+                instance ?: run {
+                    val appPrefs = AppPrefs(appContext)
+                    SongRepository(
+                        context = appContext,
+                        prefs = appPrefs,
+                        dataSource = MediaStoreDataSource(appContext) { appPrefs.getMusicFolderUris() },
+                        cacheStore = FileSongsCacheStore(appContext),
+                    ).also { instance = it }
+                }
+            }
+        }
     }
+
+    private enum class LoadState {
+        NONE,
+        CACHE,
+        FRESH,
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val refreshMutex = Mutex()
+
+    @Volatile
+    private var loadState = LoadState.NONE
+
+    private var ensureJob: Job? = null
+    private var autoRefreshJob: Job? = null
+
+    @Volatile
+    private var observing = false
+
+    private val _songs = MutableStateFlow<List<Song>>(emptyList())
+
+    val songs: StateFlow<List<Song>> = _songs.asStateFlow()
+
+    private val _isFirstScanning = MutableStateFlow(false)
+
+    val isFirstScanning: StateFlow<Boolean> = _isFirstScanning.asStateFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
     fun loadSongs(): List<Song> {
-        if (prefs.isFirstScanDone()) {
-            val cached = loadSongsFromCache()
-            if (cached.isNotEmpty()) return cached
-        }
-
-        val songs = scanSongsFromMediaStore()
-
-        if (songs.isNotEmpty()) {
-            saveSongsToCache(songs)
-            prefs.setFirstScanDone()
-        }
-
-        return songs
-    }
-
-    /**
-     * Fuerza un re-escaneo completo de la biblioteca, ignorando el caché. Útil para actualizar
-     * manualmente la biblioteca.
-     */
-    fun forceRescanSongs(): List<Song> {
-        val songs = scanSongsFromMediaStore()
-        if (songs.isNotEmpty()) {
-            saveSongsToCache(songs)
-            prefs.setFirstScanDone()
-        } else {
-        }
-        return songs
-    }
-
-    private fun hasAudioPermission(): Boolean {
-        val permission =
-            if (Build.VERSION.SDK_INT >= 33) {
-                Manifest.permission.READ_MEDIA_AUDIO
-            } else {
-                Manifest.permission.READ_EXTERNAL_STORAGE
+        if (loadState == LoadState.NONE) {
+            val cached = readCache()
+            if (cached != null && cached.isNotEmpty()) {
+                _songs.value = cached
+                loadState = LoadState.CACHE
             }
-
-        return context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
-    }
-
-    // -------------------------
-    // MediaStore (1ª vez)
-    // -------------------------
-    private fun scanSongsFromMediaStore(): List<Song> {
-        val list = mutableListOf<Song>()
-        var totalScanned = 0
-        var excluded = 0
-
-        val baseProjection = arrayOf(
-                MediaStore.Audio.Media._ID,
-                MediaStore.Audio.Media.TITLE,
-                MediaStore.Audio.Media.ARTIST,
-                MediaStore.Audio.Media.ALBUM,
-                MediaStore.Audio.Media.YEAR,
-                MediaStore.Audio.Media.DURATION,
-                MediaStore.Audio.Media.DATA,
-                MediaStore.Audio.Media.CD_TRACK_NUMBER,
-                MediaStore.Audio.Media.DISC_NUMBER,
-                MediaStore.Audio.Media.MIME_TYPE,
-                MediaStore.Audio.Media.DATE_ADDED,
-                MediaStore.Audio.Media.GENRE,
-            )
-        val projection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            baseProjection + arrayOf("sample_rate")
-        } else {
-            baseProjection
+            ensureLoadedAsync()
         }
-
-        val selectionInfo = buildSelectionForFolder()
-
-        val cursor =
-            try {
-                context.contentResolver.query(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    projection,
-                    selectionInfo.first,
-                    selectionInfo.second,
-                    null,
-                )
-            } catch (_: IllegalArgumentException) {
-                context.contentResolver.query(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    baseProjection,
-                    selectionInfo.first,
-                    selectionInfo.second,
-                    null,
-                )
-            }
-                ?: return emptyList()
-
-        cursor.use {
-            val idCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val titleCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val artistCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val albumCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-            val yearCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
-            val durCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val dataCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-            val trackNumberCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.CD_TRACK_NUMBER)
-            val discNumberCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DISC_NUMBER)
-            val sampleRateCol = try { it.getColumnIndex("sample_rate") } catch (_: Exception) { -1 }
-            val mimeTypeCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
-            val dateAddedCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
-            val genreCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.GENRE)
-
-            while (it.moveToNext()) {
-                totalScanned++
-                val id = it.getLong(idCol)
-                val uri =
-                    Uri.withAppendedPath(
-                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                        id.toString(),
-                    )
-                val filePath = it.getString(dataCol)
-                val duration = it.getLong(durCol)
-
-                // Excluir archivos de WhatsApp y otras apps de mensajería
-                if (isExcludedPath(filePath)) {
-                    excluded++
-                    continue
-                }
-
-                // No cargar carátula durante el escaneo para mayor velocidad
-                // Las carátulas se cargarán bajo demanda cuando se necesiten
-                list.add(
-                    Song(
-                        id = id,
-                        title = it.getString(titleCol),
-                        artist = it.getString(artistCol),
-                        album = it.getString(albumCol),
-                        year = it.getInt(yearCol),
-                        uri = uri,
-                        duration = duration,
-                        albumArt = null,
-                        filePath = filePath,
-                        trackNumber = it.getInt(trackNumberCol),
-                        discNumber = it.getInt(discNumberCol),
-                        sampleRate = if (sampleRateCol >= 0) { val v = it.getInt(sampleRateCol); if (v > 0) v else null } else null,
-                        mimeType = it.getString(mimeTypeCol),
-                        dateAdded = it.getLong(dateAddedCol),
-                        genre = it.getString(genreCol) ?: "",
-                    )
-                )
-            }
-        }
-
-        return list
-    }
-
-    // -------------------------
-    // Cache
-    // -------------------------
-    private fun saveSongsToCache(songs: List<Song>) {
-        try {
-            val json = JSONArray()
-
-            songs.forEach {
-                json.put(
-                    JSONObject().apply {
-                        put("id", it.id)
-                        put("title", it.title)
-                        put("artist", it.artist)
-                        put("album", it.album)
-                        put("year", it.year)
-                        put("uri", it.uri.toString())
-                        put("duration", it.duration)
-                        put("filePath", it.filePath ?: "")
-                        put("trackNumber", it.trackNumber)
-                        put("discNumber", it.discNumber)
-                        put("dateAdded", it.dateAdded)
-                        put("genre", it.genre)
-                    },
-                )
-            }
-
-            context.openFileOutput("songs_cache.json", Context.MODE_PRIVATE).use {
-                it.write(json.toString().toByteArray())
-            }
-        } catch (e: Exception) {
-            Log.e("SongRepository", "Error saving cache", e)
-        }
-    }
-
-    private fun loadSongsFromCache(): List<Song> {
-        try {
-            val text =
-                context.openFileInput("songs_cache.json").bufferedReader().use { it.readText() }
-
-            val json = JSONArray(text)
-            if (json.length() == 0) return emptyList()
-
-            // Invalidar caché si no tiene el campo genre (cache de versión anterior)
-            val first = json.getJSONObject(0)
-            if (!first.has("genre")) {
-                return emptyList()
-            }
-
-            val list = mutableListOf<Song>()
-
-            for (i in 0 until json.length()) {
-                val o = json.getJSONObject(i)
-                list.add(
-                    Song(
-                        id = o.getLong("id"),
-                        title = o.getString("title"),
-                        artist = o.getString("artist"),
-                        album = o.getString("album"),
-                        year = o.getInt("year"),
-                        uri = Uri.parse(o.getString("uri")),
-                        duration = o.getLong("duration"),
-                        filePath = o.optString("filePath", null).takeIf { it.isNotEmpty() },
-                        albumArt = null,
-                        trackNumber = o.getInt("trackNumber"),
-                        discNumber = o.getInt("discNumber"),
-                        dateAdded = o.optLong("dateAdded", 0L),
-                        genre = o.optString("genre", ""),
-                    ),
-                )
-            }
-
-            return list
-        } catch (e: Exception) {
-            // Si hay error al cargar la caché (archivo corrupto, no existe, etc.)
-            // retornar lista vacía para forzar un re-escaneo
-            Log.e("SongRepository", "Error loading cache", e)
-            return emptyList()
-        }
+        return _songs.value
     }
 
     fun isFirstScanDone(): Boolean = prefs.isFirstScanDone()
 
-    // Build query selection (and args) restricting MediaStore results to the user-chosen folder when available.
-    private fun buildSelectionForFolder(): Pair<String?, Array<String>?> {
-        val folderUris = prefs.getMusicFolderUris()
-        val base = MediaStore.Audio.Media.IS_MUSIC + "!= 0"
-        if (folderUris.isEmpty()) return Pair(base, null)
+    fun ensureLoadedAsync() {
+        if (loadState == LoadState.FRESH) return
+        if (ensureJob?.isActive == true) return
+        ensureJob = scope.launch { ensureLoaded() }
+    }
 
-        val useRelative = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-        val clauses = mutableListOf<String>()
-        val args = mutableListOf<String>()
+    suspend fun ensureLoaded(): List<Song> =
+        withContext(ioDispatcher) {
+            if (loadState == LoadState.FRESH) return@withContext _songs.value
+            if (!hasAudioPermission()) return@withContext _songs.value
 
-        folderUris.forEach { folderUriString ->
-            try {
-                val uri = Uri.parse(folderUriString)
-                val treeId = DocumentsContract.getTreeDocumentId(uri)
-                if (treeId.startsWith("primary:")) {
-                    val rel = treeId.removePrefix("primary:").trimStart('/')
-                    if (rel.isEmpty()) {
-                        // ignore empty
-                    } else {
-                        val prefix = if (rel.endsWith("/")) rel else "$rel/"
-                        if (useRelative) {
-                            clauses.add(MediaStore.Audio.Media.RELATIVE_PATH + " LIKE ?")
-                            args.add("$prefix%")
-                        } else {
-                            val basePath = Environment.getExternalStorageDirectory().absolutePath
-                            val dataPrefix = "$basePath/$rel"
-                            clauses.add(MediaStore.Audio.Media.DATA + " LIKE ?")
-                            args.add("$dataPrefix%")
-                        }
+            val cached = readCache()
+            val storedSignature = LibrarySignature.deserialize(prefs.getLibrarySignature())
+            val currentSignature = dataSource.currentSignature()
+
+            if (cached != null && cached.isNotEmpty() && storedSignature != null && currentSignature != null && storedSignature == currentSignature) {
+                _songs.value = cached
+                loadState = LoadState.FRESH
+                return@withContext cached
+            }
+
+            if (currentSignature == null && cached != null && cached.isNotEmpty()) {
+                _songs.value = cached
+                loadState = LoadState.CACHE
+                return@withContext cached
+            }
+
+            refresh(force = false, blocking = cached.isNullOrEmpty())
+        }
+
+    suspend fun refresh(
+        force: Boolean = false,
+        blocking: Boolean = false,
+    ): List<Song> =
+        withContext(ioDispatcher) {
+            refreshMutex.withLock {
+                if (!hasAudioPermission()) return@withLock _songs.value
+
+                if (blocking) _isFirstScanning.value = true else _isSyncing.value = true
+                try {
+                    val sourceSignature = dataSource.currentSignature()
+                    val storedSignature = LibrarySignature.deserialize(prefs.getLibrarySignature())
+
+                    if (!force && loadState == LoadState.FRESH && sourceSignature != null && sourceSignature == storedSignature) {
+                        return@withLock _songs.value
                     }
-                }
-            } catch (e: Exception) {
-                Log.w("SongRepository", "buildSelectionForFolder: failed to parse tree id for $folderUriString", e)
-            }
-            // raw path fallback
-            if (folderUriString.startsWith("/")) {
-                if (useRelative) {
-                    // cannot map raw path to relative cleanly; fall back to DATA
-                    clauses.add(MediaStore.Audio.Media.DATA + " LIKE ?")
-                    args.add("$folderUriString%")
-                } else {
-                    clauses.add(MediaStore.Audio.Media.DATA + " LIKE ?")
-                    args.add("$folderUriString%")
+
+                    val scanned =
+                        dataSource
+                            .querySongs()
+                            .filter { isPlayableMusic(it.filePath, it.duration) }
+
+                    val previous = _songs.value
+                    if (scanned.isEmpty() && previous.isNotEmpty() && sourceSignature == null) {
+                        return@withLock previous
+                    }
+
+                    val currentKeys = scanned.map { it.toKey() }
+                    val changed =
+                        loadState != LoadState.FRESH ||
+                            diffLibrary(previous.map { it.toKey() }, currentKeys).hasChanges
+
+                    if (changed) {
+                        _songs.value = scanned
+                    }
+
+                    persistCache(scanned, sourceSignature ?: computeSignature(currentKeys))
+                    loadState = LoadState.FRESH
+                    _songs.value
+                } catch (e: Exception) {
+                    Log.e(TAG, "refresh: error escaneando la biblioteca", e)
+                    _songs.value
+                } finally {
+                    if (blocking) _isFirstScanning.value = false else _isSyncing.value = false
                 }
             }
         }
 
-        if (clauses.isEmpty()) {
-            return Pair(base, null)
-        }
-
-        val selection = "(" + clauses.joinToString(" OR ") + ") AND " + base
-        return Pair(selection, args.toTypedArray())
-    }
-
-    // Build selection for a single folder URI (used to count songs per-folder)
-    private fun buildSelectionForSingleFolder(folderUriString: String): Pair<String?, Array<String>?> {
-        val base = MediaStore.Audio.Media.IS_MUSIC + "!= 0"
-        if (folderUriString.isEmpty()) return Pair(base, null)
-
-        val useRelative = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-
+    fun startObserving() {
+        if (observing) return
+        observing = true
         try {
-            val uri = Uri.parse(folderUriString)
-            val treeId = DocumentsContract.getTreeDocumentId(uri)
-            if (treeId.startsWith("primary:")) {
-                val rel = treeId.removePrefix("primary:").trimStart('/')
-                if (rel.isEmpty()) return Pair(base, null)
-                val prefix = if (rel.endsWith("/")) rel else "$rel/"
-                return if (useRelative) {
-                    Pair(MediaStore.Audio.Media.RELATIVE_PATH + " LIKE ? AND " + base, arrayOf("$prefix%"))
-                } else {
-                    val basePath = Environment.getExternalStorageDirectory().absolutePath
-                    val dataPrefix = "$basePath/$rel"
-                    Pair(MediaStore.Audio.Media.DATA + " LIKE ? AND " + base, arrayOf("$dataPrefix%"))
-                }
-            }
+            context.contentResolver.registerContentObserver(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                true,
+                mediaStoreObserver,
+            )
         } catch (e: Exception) {
-            Log.w("SongRepository", "buildSelectionForSingleFolder: failed for $folderUriString", e)
+            observing = false
+            Log.e(TAG, "startObserving: no se pudo registrar el observer", e)
         }
-
-        if (folderUriString.startsWith("/")) {
-            return Pair(MediaStore.Audio.Media.DATA + " LIKE ? AND " + base, arrayOf("$folderUriString%"))
-        }
-
-        return Pair(base, null)
     }
 
-    fun countSongsForFolder(folderUriString: String): Int {
-        val sel = buildSelectionForSingleFolder(folderUriString)
-        val cursor =
-            context.contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Audio.Media._ID),
-                sel.first,
-                sel.second,
-                null,
-            )
-        val c = cursor?.count ?: 0
-        cursor?.close()
-        return c
+    fun stopObserving() {
+        if (!observing) return
+        try {
+            context.contentResolver.unregisterContentObserver(mediaStoreObserver)
+        } catch (e: Exception) {
+            Log.w(TAG, "stopObserving: no se pudo desregistrar el observer", e)
+        }
+        observing = false
+        autoRefreshJob?.cancel()
     }
 
-    private fun countSongs(): Int {
-        val selectionInfo = buildSelectionForFolder()
-        val cursor =
-            context.contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Audio.Media._ID),
-                selectionInfo.first,
-                selectionInfo.second,
-                null,
-            )
-        return cursor?.count ?: 0
+    fun onAppForegrounded() {
+        scope.launch {
+            if (!prefs.isAutoScanEnabled()) return@launch
+            if (!hasAudioPermission()) return@launch
+
+            val current = dataSource.currentSignature()
+            val stored = LibrarySignature.deserialize(prefs.getLibrarySignature())
+            if (loadState != LoadState.FRESH || (current != null && current != stored)) {
+                refresh(force = true)
+            }
+        }
     }
 
-    fun scanSongs(onProgress: (current: Int, total: Int) -> Unit): List<Song> {
-        val baseProjection = arrayOf(
-                MediaStore.Audio.Media._ID,
-                MediaStore.Audio.Media.TITLE,
-                MediaStore.Audio.Media.ARTIST,
-                MediaStore.Audio.Media.ALBUM,
-                MediaStore.Audio.Media.YEAR,
-                MediaStore.Audio.Media.DURATION,
-                MediaStore.Audio.Media.DATA,
-                MediaStore.Audio.Media.CD_TRACK_NUMBER,
-                MediaStore.Audio.Media.DISC_NUMBER,
-                MediaStore.Audio.Media.MIME_TYPE,
-            )
-        val projection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            baseProjection + arrayOf("sample_rate")
-        } else {
-            baseProjection
-        }
-
-        val total = countSongs()
-        var current = 0
-        val list = mutableListOf<Song>()
-
-        val selectionInfo = buildSelectionForFolder()
-
-        val cursor =
-            try {
-                context.contentResolver.query(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    projection,
-                    selectionInfo.first,
-                    selectionInfo.second,
-                    null,
-                )
-            } catch (_: IllegalArgumentException) {
-                context.contentResolver.query(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    baseProjection,
-                    selectionInfo.first,
-                    selectionInfo.second,
-                    null,
-                )
-            }
-                ?: return emptyList()
-
-        cursor.use {
-            val idCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val titleCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val artistCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val albumCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-            val yearCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
-            val durCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val dataCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-            val trackNumberCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.CD_TRACK_NUMBER)
-            val discNumberCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DISC_NUMBER)
-            val sampleRateCol = try { it.getColumnIndex("sample_rate") } catch (_: Exception) { -1 }
-            val mimeTypeCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
-            val genreCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.GENRE)
-
-            while (it.moveToNext()) {
-                val id = it.getLong(idCol)
-                val uri =
-                    Uri.withAppendedPath(
-                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                        id.toString(),
-                    )
-                val filePath = it.getString(dataCol)
-                val duration = it.getLong(durCol)
-
-                if (isExcludedPath(filePath)) {
-                    continue
-                }
-
-                if (duration < 30000) {
-                    continue
-                }
-
-                val song =
-                    Song(
-                        id = id,
-                        title = it.getString(titleCol),
-                        artist = it.getString(artistCol),
-                        album = it.getString(albumCol),
-                        year = it.getInt(yearCol),
-                        uri = uri,
-                        duration = duration,
-                        albumArt = null,
-                        filePath = filePath,
-                        trackNumber = it.getInt(trackNumberCol),
-                        discNumber = it.getInt(discNumberCol),
-                        sampleRate = if (sampleRateCol >= 0) { val v = it.getInt(sampleRateCol); if (v > 0) v else null } else null,
-                        mimeType = it.getString(mimeTypeCol),
-                        genre = it.getString(genreCol) ?: "",
-                    )
-
-                list.add(song)
-
-                current++
-                onProgress(current, total)
+    private val mediaStoreObserver: ContentObserver by lazy {
+        object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                super.onChange(selfChange)
+                if (!prefs.isAutoScanEnabled()) return
+                scheduleAutoRefresh()
             }
         }
-
-        return list
     }
 
-    fun scanSongsStreaming(
-        onSongFound: (Song) -> Unit,
-        onProgress: (current: Int, total: Int) -> Unit,
-    ): List<Song> {
-        val baseProjection = arrayOf(
-                MediaStore.Audio.Media._ID,
-                MediaStore.Audio.Media.TITLE,
-                MediaStore.Audio.Media.ARTIST,
-                MediaStore.Audio.Media.ALBUM,
-                MediaStore.Audio.Media.YEAR,
-                MediaStore.Audio.Media.DURATION,
-                MediaStore.Audio.Media.DATA,
-                MediaStore.Audio.Media.CD_TRACK_NUMBER,
-                MediaStore.Audio.Media.DISC_NUMBER,
-                MediaStore.Audio.Media.MIME_TYPE,
-                MediaStore.Audio.Media.GENRE,
-            )
-        val projection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            baseProjection + arrayOf("sample_rate")
-        } else {
-            baseProjection
-        }
-
-        val total = countSongs()
-        var current = 0
-        val list = mutableListOf<Song>()
-
-        val selectionInfo = buildSelectionForFolder()
-
-        val cursor =
-            try {
-                context.contentResolver.query(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    projection,
-                    selectionInfo.first,
-                    selectionInfo.second,
-                    null,
-                )
-            } catch (_: IllegalArgumentException) {
-                context.contentResolver.query(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    baseProjection,
-                    selectionInfo.first,
-                    selectionInfo.second,
-                    null,
-                )
-            }
-                ?: return emptyList()
-
-        cursor.use {
-            val idCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val titleCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val artistCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val albumCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-            val yearCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
-            val durCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val dataCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-            val trackNumberCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.CD_TRACK_NUMBER)
-            val discNumberCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DISC_NUMBER)
-            val sampleRateCol = try { it.getColumnIndex("sample_rate") } catch (_: Exception) { -1 }
-            val mimeTypeCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
-            val genreCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.GENRE)
-
-            while (it.moveToNext()) {
-                val id = it.getLong(idCol)
-                val uri =
-                    Uri.withAppendedPath(
-                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                        id.toString(),
-                    )
-                val filePath = it.getString(dataCol)
-                val duration = it.getLong(durCol)
-
-                // Excluir archivos de WhatsApp y otras apps de mensajería
-                if (isExcludedPath(filePath)) {
-                    continue
+    private fun scheduleAutoRefresh() {
+        autoRefreshJob?.cancel()
+        autoRefreshJob =
+            scope.launch {
+                try {
+                    delay(AUTO_REFRESH_DEBOUNCE_MS)
+                    refresh(force = false)
+                } catch (e: Exception) {
+                    Log.e(TAG, "auto refresh failed", e)
                 }
-
-                // Excluir archivos muy cortos (notificaciones, efectos de sonido)
-                // Duración mínima: 30 segundos (30000 ms)
-                if (duration < 30000) {
-                    continue
-                }
-
-                val song =
-                    Song(
-                        id = id,
-                        title = it.getString(titleCol),
-                        artist = it.getString(artistCol),
-                        album = it.getString(albumCol),
-                        year = it.getInt(yearCol),
-                        uri = uri,
-                        duration = duration,
-                        albumArt = null,
-                        filePath = filePath,
-                        trackNumber = it.getInt(trackNumberCol),
-                        discNumber = it.getInt(discNumberCol),
-                        sampleRate = if (sampleRateCol >= 0) { val v = it.getInt(sampleRateCol); if (v > 0) v else null } else null,
-                        mimeType = it.getString(mimeTypeCol),
-                        genre = it.getString(genreCol) ?: "",
-                    )
-
-                list.add(song)
-                onSongFound(song)
-
-                current++
-                onProgress(current, total)
             }
-        }
+    }
 
-        if (list.isNotEmpty()) {
-            saveSongsToCache(list)
+    // -------------------------
+    // Caché
+    // -------------------------
+
+    fun invalidateCache() {
+        cacheStore.clear()
+        prefs.setLibrarySignature(null)
+        loadState = LoadState.NONE
+        ensureJob?.cancel()
+        ensureJob = null
+        ensureLoadedAsync()
+    }
+
+    private fun persistCache(
+        songs: List<Song>,
+        signature: LibrarySignature,
+    ) {
+        try {
+            cacheStore.write(SongsCacheCodec.encode(songs.map { it.toCached() }))
+            prefs.setLibrarySignature(signature.serialize())
             prefs.setFirstScanDone()
+        } catch (e: Exception) {
+            Log.e(TAG, "persistCache: no se pudo guardar la caché", e)
         }
-
-        return list
     }
+
+    private fun readCache(): List<Song>? {
+        val cached = SongsCacheCodec.decode(cacheStore.read()) ?: return null
+        return cached.map { it.toSong() }
+    }
+
+    private fun Song.toCached(): CachedSong =
+        CachedSong(
+            id = id,
+            title = title,
+            artist = artist,
+            album = album,
+            year = year,
+            uri = uri.toString(),
+            duration = duration,
+            filePath = filePath,
+            trackNumber = trackNumber,
+            discNumber = discNumber,
+            sampleRate = sampleRate,
+            mimeType = mimeType,
+            dateAdded = dateAdded,
+            dateModified = dateModified,
+            genre = genre,
+        )
+
+    private fun CachedSong.toSong(): Song =
+        Song(
+            id = id,
+            title = title,
+            artist = artist,
+            album = album,
+            year = year,
+            uri = uriFactory(uri),
+            duration = duration,
+            albumArt = null,
+            filePath = filePath,
+            trackNumber = trackNumber,
+            discNumber = discNumber,
+            sampleRate = sampleRate,
+            mimeType = mimeType,
+            dateAdded = dateAdded,
+            dateModified = dateModified,
+            genre = genre,
+        )
+
+    private fun Song.toKey(): SongKey = SongKey(id = id, dateAdded = dateAdded, dateModified = dateModified)
 
     /**
      * Devuelve la lista de géneros únicos con el número de canciones de cada uno.
@@ -681,13 +333,11 @@ class SongRepository(
     /**
      * Devuelve las canciones que pertenecen a un género específico.
      */
-    fun getSongsForGenre(genreName: String): List<Song> {
-        val songs = loadSongs()
-        return songs.filter { song ->
+    fun getSongsForGenre(genreName: String): List<Song> =
+        loadSongs().filter { song ->
             val genre = song.genre.ifBlank { "Desconocido" }
             genre.equals(genreName, ignoreCase = true)
         }
-    }
 
     /**
      * Devuelve la lista de artistas únicos con el número de canciones de cada uno.
@@ -711,27 +361,39 @@ class SongRepository(
             .sortedWith(compareBy({ it.name.lowercase() }, { it.artist.lowercase() }))
     }
 
+    fun countSongsForFolder(folderUriString: String): Int =
+        try {
+            dataSource.countSongsForFolder(folderUriString)
+        } catch (e: Exception) {
+            Log.w(TAG, "countSongsForFolder failed", e)
+            0
+        }
+
     /**
      * Elimina una canción del dispositivo a través de MediaStore y limpia la caché.
      * En API 30+, el sistema ya borró el archivo via [MediaStore.createDeleteRequest],
-     * solo invalidamos la caché y refrescamos.
+     * solo actualizamos el estado y refrescamos.
      */
     fun deleteSong(song: Song): Boolean {
+        val removeFromState = {
+            _songs.value = _songs.value.filterNot { it.id == song.id }
+            invalidateCache()
+            scope.launch { refresh(force = true) }
+            true
+        }
+
         // En API 30+ el sistema ya borró el archivo via createDeleteRequest
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            invalidateCache()
-            return true
+            return removeFromState()
         }
         return try {
-            val deleted = context.contentResolver.delete(song.uri, null, null)
-            if (deleted > 0) {
-                invalidateCache()
-                true
+            if (context.contentResolver.delete(song.uri, null, null) > 0) {
+                removeFromState()
             } else {
                 false
             }
         } catch (e: Exception) {
-            Log.e("SongRepository", "Error deleting song", e)
+            Log.e(TAG, "Error deleting song", e)
             false
         }
     }
@@ -740,40 +402,38 @@ class SongRepository(
      * Escribe tags en un archivo de audio usando TagWriter.
      */
     fun writeTags(
-        uri: android.net.Uri,
+        uri: Uri,
         filePath: String?,
         input: TagWriteInput,
-    ): Result<TagWriteResult> {
-        return TagWriter.writeTags(context, filePath, uri, input)
-    }
+    ): Result<TagWriteResult> = TagWriter.writeTags(context, filePath, uri, input)
 
     /**
-     * Actualiza los campos editables en la caché para una canción específica.
+     * Actualiza los campos editables en el estado en memoria y en la caché para una canción.
      */
     fun updateSongInCache(
         songId: Long,
         input: TagWriteInput,
     ) {
+        val current = _songs.value
+        val index = current.indexOfFirst { it.id == songId }
+        if (index < 0) return
+
+        val updated =
+            current[index].let { song ->
+                song.copy(
+                    title = input.title ?: song.title,
+                    artist = input.artist ?: song.artist,
+                    album = input.album ?: song.album,
+                    genre = input.genre ?: song.genre,
+                    year = input.year?.toIntOrNull() ?: song.year,
+                )
+            }
+
+        _songs.value = current.toMutableList().also { it[index] = updated }
         try {
-            val text =
-                context.openFileInput("songs_cache.json").bufferedReader().use { it.readText() }
-            val json = JSONArray(text)
-            for (i in 0 until json.length()) {
-                val obj = json.getJSONObject(i)
-                if (obj.getLong("id") == songId) {
-                    input.title?.let { obj.put("title", it) }
-                    input.artist?.let { obj.put("artist", it) }
-                    input.album?.let { obj.put("album", it) }
-                    input.genre?.let { obj.put("genre", it) }
-                    input.year?.let { obj.put("year", it.toIntOrNull() ?: obj.getInt("year")) }
-                    break
-                }
-            }
-            context.openFileOutput("songs_cache.json", Context.MODE_PRIVATE).use {
-                it.write(json.toString().toByteArray())
-            }
-        } catch (_: Exception) {
-            // Si falla la actualización de caché, no es crítico
+            cacheStore.write(SongsCacheCodec.encode(_songs.value.map { it.toCached() }))
+        } catch (e: Exception) {
+            Log.w(TAG, "updateSongInCache: no se pudo actualizar la caché", e)
         }
     }
 
@@ -784,15 +444,53 @@ class SongRepository(
         try {
             MediaScannerConnection.scanFile(context, arrayOf(filePath), null, null)
         } catch (e: Exception) {
-            Log.e("SongRepository", "Error scanning file: $filePath", e)
+            Log.e(TAG, "Error scanning file: $filePath", e)
         }
     }
 
-    /**
-     * Invalida la caché forzando un re-escaneo en la próxima carga.
-     */
-    private fun invalidateCache() {
-        context.deleteFile("songs_cache.json")
-        prefs.setFirstScanDone()
+    // -------------------------
+    // Permisos
+    // -------------------------
+
+    private fun hasAudioPermission(): Boolean {
+        val permission =
+            if (Build.VERSION.SDK_INT >= 33) {
+                Manifest.permission.READ_MEDIA_AUDIO
+            } else {
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            }
+
+        return context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+    }
+}
+
+class FileSongsCacheStore(
+    private val context: Context,
+) : SongsCacheStore {
+    private val fileName = "songs_cache.json"
+
+    override fun read(): String? =
+        try {
+            context.openFileInput(fileName).bufferedReader().use { it.readText() }
+        } catch (_: Exception) {
+            null
+        }
+
+    override fun write(json: String) {
+        try {
+            context.openFileOutput(fileName, Context.MODE_PRIVATE).use {
+                it.write(json.toByteArray())
+            }
+        } catch (e: Exception) {
+            Log.e("FileSongsCacheStore", "No se pudo escribir la caché", e)
+        }
+    }
+
+    override fun clear() {
+        try {
+            context.deleteFile(fileName)
+        } catch (e: Exception) {
+            Log.w("FileSongsCacheStore", "No se pudo borrar la caché", e)
+        }
     }
 }
