@@ -1,6 +1,5 @@
 package com.cvc953.localplayer.ui.headers
 
-import android.app.Application
 import android.graphics.Bitmap
 import com.cvc953.localplayer.util.ArtworkLoader
 import android.media.MediaMetadataRetriever
@@ -54,12 +53,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cvc953.localplayer.R
-import com.cvc953.localplayer.model.SongRepository
 import com.cvc953.localplayer.ui.extendedColors
 import com.cvc953.localplayer.ui.screens.normalizeArtistName
 import com.cvc953.localplayer.viewmodel.ArtistViewModel
 import com.cvc953.localplayer.viewmodel.PlaybackViewModel
+import com.cvc953.localplayer.viewmodel.SongViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,9 +76,8 @@ fun ArtistHeader(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
 
-    val songs by artistViewModel.getSongsForArtist(artistName).collectAsState(initial = emptyList())
-    val repo = remember { SongRepository(artistViewModel.getApplication<Application>()) }
-    val allSongs = remember { repo.loadSongs() }
+    val songViewModel: SongViewModel = viewModel()
+    val allSongs by songViewModel.songs.collectAsState()
     val artistSongs =
         remember(allSongs, artistName) {
             allSongs.filter { song -> normalizeArtistName(song.artist).any { it.equals(artistName, ignoreCase = true) } }

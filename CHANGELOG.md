@@ -6,6 +6,23 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 
+## [Sin publicar]
+
+### Añadido
+- 🔄 Sincronización de la biblioteca en tiempo real: las canciones agregadas, eliminadas o editadas se reflejan al instante en Canciones, Álbumes, Artistas, Géneros y Listas, sin reiniciar la app ni refrescar manualmente
+- 👁️ Detección de cambios de MediaStore mientras la app está abierta (con debounce) y validación automática al volver a primer plano (cubre archivos copiados por USB/MTP)
+
+### Cambiado
+- 🗂️ La biblioteca ahora es una única fuente de verdad reactiva compartida por todas las categorías (antes cada pantalla guardaba su propia copia)
+- 💾 La caché de canciones se valida contra MediaStore antes de usarse (firma de biblioteca) y ahora conserva la frecuencia de muestreo, el tipo MIME y la fecha de modificación
+- ⏱️ Filtro uniforme de duración mínima (30 s): el primer escaneo, el refresco automático y el manual devuelven el mismo conjunto de canciones (las pistas de menos de 30 s ya no se listan)
+- 🔕 Los refrescos en segundo plano ya no muestran el indicador de escaneo a pantalla completa
+
+### Corregido
+- 🐛 Las canciones de carpetas eliminadas en Ajustes desaparecen de la biblioteca (antes la caché no se invalidaba)
+- 🐛 La información de audio (frecuencia de muestreo y tipo MIME) ya no se pierde al recargar la caché
+- 🧹 Eliminados el observer y el re-escaneo duplicado de la biblioteca en `MainViewModel`
+
 ## [1.1.0]
 
 ### Añadido

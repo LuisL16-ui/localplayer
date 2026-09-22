@@ -5,12 +5,7 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
 import android.provider.MediaStore
-import androidx.compose.runtime.State
-import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -25,13 +20,10 @@ import com.cvc953.localplayer.util.LrcLine
 import com.cvc953.localplayer.util.TtmlParser
 import com.cvc953.localplayer.util.parseLrc
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 
 class MainViewModel(
@@ -75,19 +67,12 @@ class MainViewModel(
         _isAboutVisible.value = false
     }
 
-    private val repository = SongRepository(application)
+    private val songRepository = SongRepository.getInstance(application)
     private val prefs: SharedPreferences =
         application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    // Lista de canciones
-    private val _songs = MutableStateFlow<List<Song>>(emptyList())
-    val songs: StateFlow<List<Song>> = _songs
-
     // ViewModels especializados
     val lyricsViewModel = LyricsViewModel(application)
-    val songViewModel = SongViewModel(application)
-    val artistViewModel = ArtistViewModel(application)
-    val albumViewModel = AlbumViewModel(application)
     val playbackViewModel = PlaybackViewModel(application)
 
     // Aquí puedes exponer solo el estado global mínimo necesario y delegar toda la lógica a los ViewModels anteriores.
@@ -178,96 +163,12 @@ class MainViewModel(
     private val _ttmlLyrics = MutableStateFlow<TtmlLyrics?>(null)
     val ttmlLyrics: StateFlow<TtmlLyrics?> = _ttmlLyrics
 
-    private val _isScanning = mutableStateOf(false)
-    val isScanning: State<Boolean> = _isScanning
-
-    private val _scanProgress = mutableStateOf(0f)
-    val scanProgress: State<Float> = _scanProgress
-
     // Cola de reproducción
     private val _queue = MutableStateFlow<List<Song>>(emptyList())
     val queue: StateFlow<List<Song>> = _queue
 
     // Historial de reproducción para soportar "Anterior" respetando el orden
     private val playHistory: MutableList<Song> = mutableListOf()
-
-    // Job para debouncing del auto-scan
-    private var autoScanJob: Job? = null
-
-    // Observer para detectar cambios en la biblioteca de música
-    private val mediaStoreObserver =
-        object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                super.onChange(selfChange)
-
-                // Detectar cambios en la biblioteca y refrescar (si está activado)
-                if (appPrefs.isAutoScanEnabled()) {
-                    scheduleLibraryRefresh()
-                } else {
-                }
-            }
-        }
-
-    private fun scheduleLibraryRefresh() {
-        // Cancelar el job anterior si existe (debouncing)
-        autoScanJob?.cancel()
-
-        // Programar un nuevo escaneo con delay de 2 segundos
-        autoScanJob =
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    delay(2000) // Esperar 2 segundos para agrupar múltiples cambios
-                    refreshMusicLibrary()
-                } catch (e: Exception) {
-                    android.util.Log.e("MainViewModel", "Error in auto-scan", e)
-                }
-            }
-    }
-
-    private fun refreshMusicLibrary() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // When auto-scan is enabled we must force a full rescan to detect newly added files
-                val newSongs = if (appPrefs.isAutoScanEnabled()) repository.forceRescanSongs() else repository.loadSongs()
-                val currentSongs = _songs.value
-
-
-                // Actualizar si hay cambios en el número de canciones o en los IDs
-                val currentIds = currentSongs.map { it.id }.toSet()
-                val newIds = newSongs.map { it.id }.toSet()
-                val hasChanges = currentIds != newIds
-
-                if (hasChanges) {
-                    _songs.value = newSongs.sortedBy { it.title }
-                } else {
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "Error refreshing library", e)
-            }
-        }
-    }
-
-    fun manualRefreshLibrary() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                _isScanning.value = true
-
-                // Forzar re-escaneo completo ignorando el caché
-                val newSongs = repository.forceRescanSongs()
-
-
-                // Actualizar la lista con las nuevas canciones
-                withContext(Dispatchers.Main) {
-                    _songs.value = newSongs.sortedBy { it.title }
-                }
-
-                _isScanning.value = false
-            } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "Error en re-escaneo manual", e)
-                _isScanning.value = false
-            }
-        }
-    }
 
     fun addToQueueEnd(song: Song) {
         val list = _queue.value.toMutableList()
@@ -290,59 +191,6 @@ class MainViewModel(
         // Guardamos todo el orden de próximas canciones para que el drag funcione
         // tanto con cola manual como con el resto de la biblioteca.
         _queue.value = newOrder
-    }
-
-    init {
-        // Registrar el observer para detectar cambios en la biblioteca
-        getApplication<Application>()
-            .contentResolver
-            .registerContentObserver(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                true,
-                mediaStoreObserver,
-            )
-        // Only perform initial scan if user previously selected a music folder
-        val appPrefs = AppPrefs(getApplication())
-        if (appPrefs.hasMusicFolderUri()) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    // Solo mostrar indicador si es la primera vez y el usuario tiene activado el escaneo automático
-                    val firstScan = !repository.isFirstScanDone()
-                    if (firstScan && appPrefs.isAutoScanEnabled()) {
-                        _isScanning.value = true
-                        val temp = mutableListOf<Song>()
-                        // Escaneo incremental: actualizamos _songs a medida que se encuentran canciones
-                        repository.scanSongsStreaming(
-                            onSongFound = { song ->
-                                temp.add(song)
-                                _songs.value = temp.sortedBy { it.title }
-                            },
-                            onProgress = { current, total ->
-                                _scanProgress.value =
-                                    if (total > 0) current.toFloat() / total else 0f
-                            },
-                        )
-                        _isScanning.value = false
-                    } else {
-                        val loaded =
-                            if (appPrefs.isAutoScanEnabled()) {
-                                withContext(Dispatchers.IO) {
-                                    repository.loadSongs()
-                                }
-                            } else {
-                                withContext(Dispatchers.IO) { repository.loadSongs() }
-                            }
-                        _songs.value = loaded.sortedBy { it.title }
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("MainViewModel", "Error inicializando ViewModel", e)
-                    _isScanning.value = false
-                }
-            }
-        } else {
-
-            _isScanning.value = false
-        }
     }
 
     fun playSong(
@@ -374,28 +222,13 @@ class MainViewModel(
         }
     }
 
-    override fun onCleared() {
-        // Cancelar cualquier auto-scan pendiente
-        autoScanJob?.cancel()
-        // Deregistrar el observer cuando el ViewModel se destruye
-        getApplication<Application>().contentResolver.unregisterContentObserver(mediaStoreObserver)
-        super.onCleared()
-    }
-
     fun toggleAutoScan(enabled: Boolean) {
         appPrefs.setAutoScanEnabled(enabled)
         _autoScanEnabled.value = enabled
 
         if (enabled) {
-            // If enabling auto-scan, trigger an immediate refresh so new files are picked up
-            try {
-                refreshMusicLibrary()
-            } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "Error refreshing after enabling auto-scan", e)
-            }
-        } else {
-            // If disabling, cancel any pending scan
-            autoScanJob?.cancel()
+            songRepository.ensureLoadedAsync()
+            songRepository.onAppForegrounded()
         }
     }
 

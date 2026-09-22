@@ -1,79 +1,70 @@
-
 package com.cvc953.localplayer.viewmodel
 
 import android.app.Application
-
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cvc953.localplayer.controller.SongController
 import com.cvc953.localplayer.model.Song
-import com.cvc953.localplayer.preferences.AppPrefs
+import com.cvc953.localplayer.model.SongRepository
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SongViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
     private val controller = SongController(getApplication())
-    private val appPrefs = AppPrefs(getApplication())
-    private val _songs = MutableStateFlow<List<Song>>(emptyList())
-    val songs: StateFlow<List<Song>> = _songs
+    private val repository = SongRepository.getInstance(getApplication())
+
+    private val _searchQuery = MutableStateFlow("")
     private val _selectedSong = MutableStateFlow<Song?>(null)
     val selectedSong: StateFlow<Song?> = _selectedSong
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
-    private val _isScanning = MutableStateFlow(false)
-    val isScanning: StateFlow<Boolean> = _isScanning
 
+    val songs: StateFlow<List<Song>> =
+        combine(repository.songs, _searchQuery) { library, query ->
+            if (query.isBlank()) {
+                library
+            } else {
+                library.filter {
+                    it.title.contains(query, ignoreCase = true) ||
+                        it.artist.contains(query, ignoreCase = true) ||
+                        it.album.contains(query, ignoreCase = true)
+                }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, repository.loadSongs())
 
+    val isScanning: StateFlow<Boolean> = repository.isFirstScanning
 
     init {
-        // Load songs when the ViewModel is created so UI shows available music
-        loadSongs()
+        repository.ensureLoadedAsync()
     }
-
 
     fun manualRefreshLibrary() {
-        loadSongs(forceRescan = true, showScanning = true)
-    }
-
-    fun loadSongs(forceRescan: Boolean = false, showScanning: Boolean = false) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (showScanning) _isScanning.value = true
+        viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             try {
-                val result = if (forceRescan) controller.forceRescan() else controller.getAllSongs()
-                _songs.value = result
+                controller.forceRescan()
             } catch (e: Exception) {
-                android.util.Log.e("SongViewModel", "loadSongs: Error", e)
-                _songs.value = emptyList()
-                _error.value = "Error cargando canciones: ${e.message}"
+                android.util.Log.e("SongViewModel", "manualRefreshLibrary: Error", e)
+                _error.value = "Error actualizando la biblioteca: ${e.message}"
             } finally {
                 _isLoading.value = false
-                if (showScanning) _isScanning.value = false
             }
         }
     }
 
     fun searchSongs(query: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _isLoading.value = true
-            _error.value = null
-            try {
-                _songs.value = controller.searchSongs(query)
-            } catch (e: Exception) {
-                _songs.value = emptyList()
-                _error.value = "Error buscando canciones: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
+        _searchQuery.value = query
     }
 
     fun selectSong(song: Song) {
@@ -85,21 +76,22 @@ class SongViewModel(
     }
 
     /**
-     * Elimina una canción del dispositivo: archivo físico, MediaStore y caché.
-     * Actualiza la lista local y fuerza un refresco del repositorio.
+     * Elimina una canción del dispositivo: archivo físico, MediaStore y estado en memoria.
+     * El repositorio propaga la baja a todas las categorías.
      */
-    fun deleteSong(song: Song, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+    fun deleteSong(
+        song: Song,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {},
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             val result = controller.deleteSong(song)
-            if (result.isSuccess) {
-                // Remover de la lista local
-                _songs.value = _songs.value.filter { it.id != song.id }
-                // Forzar recarga completa para refrescar playlists y demás
-                loadSongs(forceRescan = true)
-                launch(Dispatchers.Main) { onSuccess() }
-            } else {
-                val msg = result.exceptionOrNull()?.message ?: "Error desconocido al eliminar"
-                launch(Dispatchers.Main) { onError(msg) }
+            withContext(Dispatchers.Main) {
+                if (result.isSuccess) {
+                    onSuccess()
+                } else {
+                    onError(result.exceptionOrNull()?.message ?: "Error desconocido al eliminar")
+                }
             }
         }
     }

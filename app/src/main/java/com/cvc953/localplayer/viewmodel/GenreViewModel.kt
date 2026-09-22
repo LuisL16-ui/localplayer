@@ -6,65 +6,50 @@ import androidx.lifecycle.viewModelScope
 import com.cvc953.localplayer.controller.GenreController
 import com.cvc953.localplayer.model.Genre
 import com.cvc953.localplayer.model.Song
-import kotlinx.coroutines.Dispatchers
+import com.cvc953.localplayer.model.SongRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 class GenreViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
     private val controller = GenreController(getApplication())
-    private val _genres = MutableStateFlow<List<Genre>>(emptyList())
-    val genres: StateFlow<List<Genre>> = _genres
+    private val repository = SongRepository.getInstance(getApplication())
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
-    private val _songs = MutableStateFlow<List<Song>>(emptyList())
-    val songs: StateFlow<List<Song>> = _songs
+
+    private val _searchQuery = MutableStateFlow("")
+    private val _requestedGenre = MutableStateFlow<Genre?>(null)
+
+    val genres: StateFlow<List<Genre>> =
+        repository.songs
+            .map { controller.getAllGenres() }
+            .combine(_searchQuery) { genres, query ->
+                if (query.isBlank()) genres else genres.filter { it.name.contains(query, ignoreCase = true) }
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, controller.getAllGenres())
+
+    val songs: StateFlow<List<Song>> =
+        combine(repository.songs, _requestedGenre) { _, genre ->
+            if (genre == null) emptyList() else controller.getSongsForGenre(genre)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
-        loadGenres()
-    }
-
-    fun loadGenres() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _isLoading.value = true
-            _error.value = null
-            try {
-                _genres.value = controller.getAllGenres()
-            } catch (e: Exception) {
-                _genres.value = emptyList()
-                _error.value = "Error cargando géneros: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
+        repository.ensureLoadedAsync()
     }
 
     fun searchGenres(query: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _isLoading.value = true
-            _error.value = null
-            try {
-                _genres.value = controller.searchGenres(query)
-            } catch (e: Exception) {
-                _genres.value = emptyList()
-                _error.value = "Error buscando géneros: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
+        _searchQuery.value = query
     }
 
     fun loadSongsForGenre(genre: Genre) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                _songs.value = controller.getSongsForGenre(genre)
-            } catch (e: Exception) {
-                _songs.value = emptyList()
-            }
-        }
+        _requestedGenre.value = genre
     }
 }

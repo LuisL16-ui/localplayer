@@ -53,7 +53,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cvc953.localplayer.R
-import com.cvc953.localplayer.model.SongRepository
 import com.cvc953.localplayer.ui.SongItem
 import com.cvc953.localplayer.ui.components.DraggableSwipeRow
 import com.cvc953.localplayer.ui.components.MultiSongSelectionBar
@@ -80,8 +79,7 @@ fun ArtistDetailScreen(
     onViewAllSongs: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val repo = remember { SongRepository(artistViewModel.getApplication<Application>()) }
-    val allSongs = remember { repo.loadSongs() }
+    val allSongs by songViewModel.songs.collectAsState()
     val playerState by playbackViewModel.playerState.collectAsState()
     val playlists by playlistViewModel.playlists.collectAsState()
     val artistSongs =

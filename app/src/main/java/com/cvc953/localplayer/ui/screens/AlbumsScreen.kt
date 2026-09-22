@@ -54,9 +54,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -108,7 +105,7 @@ fun AlbumsScreen(
         viewModel()
     val songs by songViewModel.songs.collectAsState()
     val albums by albumViewModel.albums.collectAsState()
-    val isScanning by albumViewModel.isScanning
+    val isScanning by albumViewModel.isScanning.collectAsState()
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showSearchBar by rememberSaveable { mutableStateOf(false) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
@@ -117,14 +114,6 @@ fun AlbumsScreen(
     val context = LocalContext.current
     val activity = context as? Activity
     var lastBackPressTime by remember { mutableStateOf(0L) }
-
-    // Refrescar álbumes desde caché cada vez que la pantalla se muestra
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(lifecycle) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            albumViewModel.loadAlbums()
-        }
-    }
 
     BackHandler {
         val currentTime = System.currentTimeMillis()

@@ -28,7 +28,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -105,6 +105,9 @@ dependencies {
     // Mocking for unit tests
     testImplementation(libs.mockk)
     testImplementation(libs.mockkandroid)
+
+    // Implementación real de org.json para los unit tests (el stub de android.jar lanza excepciones)
+    testImplementation(libs.org.json)
     androidTestImplementation(libs.mockk)
     androidTestImplementation(libs.mockkandroid)
 

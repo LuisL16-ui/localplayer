@@ -5,7 +5,7 @@ import com.cvc953.localplayer.model.Artist
 import com.cvc953.localplayer.model.SongRepository
 
 class ArtistController(private val context: Context) {
-    private val repository = SongRepository(context)
+    private val repository = SongRepository.getInstance(context)
 
     fun getAllArtists(): List<Artist> = repository.getAllArtists()
 

@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
 
+## [Unreleased]
+
+### Added
+- 🔄 Real-time library synchronization: added, removed or edited songs appear immediately in Songs, Albums, Artists, Genres and Playlists, with no app restart or manual refresh
+- 👁️ MediaStore change detection while the app is open (debounced) plus automatic validation when returning to the foreground (covers files copied over USB/MTP)
+
+### Changed
+- 🗂️ The library is now a single reactive source of truth shared by every category (each screen used to keep its own copy)
+- 💾 The song cache is validated against MediaStore before being used (library signature) and now keeps sample rate, MIME type and modification date
+- ⏱️ Uniform minimum-duration filter (30 s): first scan, automatic refresh and manual refresh return the same song set (tracks shorter than 30 s are no longer listed)
+- 🔕 Background refreshes no longer show the full-screen scanning indicator
+
+### Fixed
+- 🐛 Songs from folders removed in Settings disappear from the library (the cache was not invalidated before)
+- 🐛 Audio info (sample rate and MIME type) is no longer lost when the cache is reloaded
+- 🧹 Removed the duplicated library observer and rescan logic in `MainViewModel`
+
 ## [1.1.0]
 
 ### Added

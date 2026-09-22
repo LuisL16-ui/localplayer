@@ -6,6 +6,23 @@ Il formato si basa su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/).
 
 
+## [Non pubblicato]
+
+### Aggiunto
+- 🔄 Sincronizzazione della libreria in tempo reale: i brani aggiunti, rimossi o modificati compaiono subito in Brani, Album, Artisti, Generi e Playlist, senza riavviare l'app né aggiornare manualmente
+- 👁️ Rilevamento delle modifiche di MediaStore mentre l'app è aperta (con debounce) e validazione automatica al ritorno in primo piano (copre i file copiati via USB/MTP)
+
+### Cambiato
+- 🗂️ La libreria è ora un'unica fonte di verità reattiva condivisa da tutte le categorie (prima ogni schermata manteneva la propria copia)
+- 💾 La cache dei brani viene validata rispetto a MediaStore prima dell'uso (firma della libreria) e ora conserva frequenza di campionamento, tipo MIME e data di modifica
+- ⏱️ Filtro uniforme di durata minima (30 s): prima scansione, aggiornamento automatico e manuale restituiscono lo stesso insieme di brani (le tracce sotto i 30 s non vengono più elencate)
+- 🔕 Gli aggiornamenti in background non mostrano più l'indicatore di scansione a schermo intero
+
+### Corretto
+- 🐛 I brani delle cartelle rimosse nelle Impostazioni scompaiono dalla libreria (prima la cache non veniva invalidata)
+- 🐛 Le informazioni audio (frequenza di campionamento e tipo MIME) non vengono più perse al ricaricamento della cache
+- 🧹 Rimossi l'observer e la logica di ri-scansione duplicata in `MainViewModel`
+
 ## [1.1.0]
 
 ### Aggiunto
