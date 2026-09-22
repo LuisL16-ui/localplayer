@@ -45,6 +45,18 @@
 # Lifecycle
 -keep class androidx.lifecycle.** { *; }
 
+# WorkManager is initialized by AndroidX Startup before MainActivity and builds
+# WorkDatabase through reflective Room/protobuf code in release builds.
+-keep class androidx.startup.** { *; }
+-keep class androidx.work.** { *; }
+-keep class androidx.room.** { *; }
+-keep class androidx.sqlite.** { *; }
+-keep class androidx.datastore.preferences.protobuf.** { *; }
+-keep class androidx.datastore.** { *; }
+-keepattributes RuntimeVisibleAnnotations,RuntimeInvisibleAnnotations
+-keepattributes RuntimeVisibleParameterAnnotations,RuntimeInvisibleParameterAnnotations
+-keepattributes AnnotationDefault
+
 # jaudiotagger — tag reading/writing
 -keep class org.jaudiotagger.** { *; }
 -dontwarn org.jaudiotagger.**

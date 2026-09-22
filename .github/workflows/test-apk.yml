@@ -69,20 +69,33 @@ jobs:
 
       - name: Smoke test release APK
         uses: reactivecircus/android-emulator-runner@v2
+        continue-on-error: true
         with:
           api-level: 35
           arch: x86_64
           target: google_apis
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
           script: |
-            adb install -r "test-apk/LocalPlayer-${{ inputs.version || format('run-{0}', github.run_number) }}.apk"
+            set -e
+            capture_diagnostics() {
+              adb logcat -d > test-apk/logcat.txt 2>&1 || true
+              adb shell getprop > test-apk/getprop.txt 2>&1 || true
+              adb shell dumpsys activity processes > test-apk/activity.txt 2>&1 || true
+            }
+            trap capture_diagnostics EXIT
+
+            adb wait-for-device
+            adb install -r "test-apk/LocalPlayer-${{ inputs.version || format('run-{0}', github.run_number) }}.apk" > test-apk/install.txt 2>&1
             adb logcat -c
-            adb shell am start -n com.cvc953.localplayer/.MainActivity
+            adb shell am start -n com.cvc953.localplayer/.MainActivity > test-apk/launch.txt 2>&1
             sleep 5
-            adb logcat -d > test-apk/logcat.txt
             if ! adb shell pidof com.cvc953.localplayer >/dev/null; then
               echo "::error::Release APK process exited after launch."
+              printf 'FAIL\n' > test-apk/smoke-status.txt
               exit 1
             fi
+            printf 'PASS\n' > test-apk/smoke-status.txt
 
       - name: Collect R8 diagnostics
         if: always()
@@ -100,6 +113,23 @@ jobs:
             test-apk/*.apk
             test-apk/checksums.txt
             test-apk/logcat.txt
+            test-apk/getprop.txt
+            test-apk/activity.txt
+            test-apk/install.txt
+            test-apk/launch.txt
+            test-apk/smoke-status.txt
             test-apk/r8
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Fail if release smoke test did not pass
+        if: always()
+        run: |
+          if [[ ! -f test-apk/smoke-status.txt ]]; then
+            echo "::error::The emulator did not complete the smoke test."
+            exit 1
+          fi
+          if ! grep -qx 'PASS' test-apk/smoke-status.txt; then
+            echo "::error::The release APK failed the smoke test."
+            exit 1
+          fi
