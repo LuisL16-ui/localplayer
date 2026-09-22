@@ -67,11 +67,39 @@ jobs:
           cp "$APK_PATH" "test-apk/LocalPlayer-${TEST_VERSION}.apk"
           (cd test-apk && sha256sum "LocalPlayer-${TEST_VERSION}.apk" > checksums.txt)
 
+      - name: Smoke test release APK
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          script: |
+            adb install -r "test-apk/LocalPlayer-${{ inputs.version || format('run-{0}', github.run_number) }}.apk"
+            adb logcat -c
+            adb shell am start -n com.cvc953.localplayer/.MainActivity
+            sleep 5
+            adb logcat -d > test-apk/logcat.txt
+            if ! adb shell pidof com.cvc953.localplayer >/dev/null; then
+              echo "::error::Release APK process exited after launch."
+              exit 1
+            fi
+
+      - name: Collect R8 diagnostics
+        if: always()
+        run: |
+          mkdir -p test-apk/r8
+          cp -R app/build/outputs/mapping/release/. test-apk/r8/ 2>/dev/null || true
+          cp -R app/build/outputs/logs/. test-apk/r8/ 2>/dev/null || true
+
       - name: Upload test APK artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: localplayer-test-apk-${{ github.run_number }}
           path: |
             test-apk/*.apk
             test-apk/checksums.txt
+            test-apk/logcat.txt
+            test-apk/r8
+          if-no-files-found: warn
           retention-days: 7
