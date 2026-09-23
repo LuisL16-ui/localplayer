@@ -8,6 +8,7 @@ import com.cvc953.localplayer.controller.AlbumController
 import com.cvc953.localplayer.model.Album
 import com.cvc953.localplayer.model.Song
 import com.cvc953.localplayer.model.SongRepository
+import com.cvc953.localplayer.util.normalizeArtistName
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -79,30 +80,19 @@ class AlbumViewModel(
         albumName: String,
         artistName: String,
     ): List<Song> {
-        val normalizedRequestedArtists = normalizeArtistName(artistName).map { it.trim() }
+        val targetArtists = normalizeArtistName(artistName).map { it.lowercase() }
         val matchingAlbum =
             controller.getAllAlbums().find { album ->
                 val nameMatches = album.name.trim().equals(albumName.trim(), ignoreCase = true)
-                val artistMatches =
-                    normalizeArtistName(album.artist).any { artist ->
-                        normalizedRequestedArtists.any { requestedArtist ->
-                            artist.trim().equals(requestedArtist, ignoreCase = true)
-                        }
-                    }
+                val artistMatches = targetArtists.isEmpty() ||
+                    normalizeArtistName(album.artist).any { it.lowercase() in targetArtists }
                 nameMatches && artistMatches
             }
 
-        return if (matchingAlbum != null) controller.getSongsForAlbum(matchingAlbum) else emptyList()
-    }
-
-    private fun normalizeArtistName(artist: String): List<String> =
-        if (artist.trim().equals("AC/DC", ignoreCase = true)) {
-            listOf("AC/DC")
+        return if (matchingAlbum != null) {
+            controller.getSongsForAlbum(matchingAlbum)
         } else {
-            artist
-                .trim()
-                .split(',', '/')
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
+            controller.getSongsForAlbum(Album(albumName, artistName, 0))
         }
+    }
 }

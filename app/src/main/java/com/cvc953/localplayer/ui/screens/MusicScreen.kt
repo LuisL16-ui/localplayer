@@ -199,10 +199,15 @@ fun MusicScreen(audioFileUri: String? = null, onOpenPlayer: () -> Unit) {
                 ),
             )
 
-        LaunchedEffect(Unit) {
-            while (isActive) {
+        LaunchedEffect(sheetState, peekPx, hideOffsetPx) {
+            androidx.compose.runtime.snapshotFlow {
                 try {
-                    val sheetOffset = sheetState.requireOffset()
+                    sheetState.requireOffset()
+                } catch (_: IllegalStateException) {
+                    null
+                }
+            }.collect { sheetOffset ->
+                if (sheetOffset != null) {
                     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
                     val maxSheetOffset = screenHeightPx - peekPx
                     if (maxSheetOffset > 0f) {
@@ -210,9 +215,7 @@ fun MusicScreen(audioFileUri: String? = null, onOpenPlayer: () -> Unit) {
                         bottomNavOffset = with(density) { (hideOffsetPx * progress).toDp() }
                         miniPlayerAlpha = 1f - progress
                     }
-                } catch (_: IllegalStateException) {
                 }
-                delay(16)
             }
         }
 

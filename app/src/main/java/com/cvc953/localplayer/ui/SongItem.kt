@@ -85,6 +85,8 @@ val MaterialTheme.extendedColors: ExtendedColors
     @Composable
     get() = LocalExtendedColors.current
 
+private val bitrateCache = android.util.LruCache<android.net.Uri, Int>(256)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Suppress("ktlint:standard:function-naming")
 @Composable
@@ -108,6 +110,11 @@ fun SongItem(
     var albumArt by remember { mutableStateOf<Bitmap?>(null) }
     var effectiveBitrateKbps by remember { mutableIntStateOf(0) }
 
+    val isHiFi = (song.sampleRate ?: 0) >= 48000 ||
+        song.mimeType?.contains("flac", ignoreCase = true) == true ||
+        song.mimeType?.contains("wav", ignoreCase = true) == true ||
+        effectiveBitrateKbps > 320
+
     // Cargar mensajes para Toasts y UI
     val removedFromFavoritesMsg = stringResource(R.string.removed_from_favorites)
     val addedToFavoritesMsg = stringResource(R.string.added_to_favorites)
@@ -115,15 +122,18 @@ fun SongItem(
 
     LaunchedEffect(song.uri) {
         albumArt = ArtworkLoader.loadThumbnail(context, song.uri, song.filePath, 256)
-        if (effectiveBitrateKbps == 0) {
+        val cachedBr = bitrateCache.get(song.uri)
+        if (cachedBr != null) {
+            effectiveBitrateKbps = cachedBr
+        } else if (effectiveBitrateKbps == 0 && !isHiFi) {
             withContext(Dispatchers.IO) {
                 val retriever = MediaMetadataRetriever()
                 try {
                     retriever.setDataSource(context, song.uri)
                     val br = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
-                    if (br != null) {
-                        effectiveBitrateKbps = (br.toIntOrNull() ?: 0) / 1000
-                    }
+                    val kbps = (br?.toIntOrNull() ?: 0) / 1000
+                    bitrateCache.put(song.uri, kbps)
+                    effectiveBitrateKbps = kbps
                 } catch (_: Exception) {
                 } finally {
                     try { retriever.release() } catch (_: Exception) {}
@@ -192,7 +202,7 @@ fun SongItem(
         }
 
         Column(horizontalAlignment = Alignment.End) {
-            if (effectiveBitrateKbps > 320) {
+            if (isHiFi) {
                 Box(
                     modifier = Modifier
                         .background(
@@ -440,7 +450,7 @@ fun SongItem(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
                         LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                            items(playlists) { playlist ->
+                            items(playlists, key = { it.name }) { playlist ->
                                 Card(
                                     modifier =
                                         Modifier

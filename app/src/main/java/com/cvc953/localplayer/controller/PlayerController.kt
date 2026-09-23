@@ -7,6 +7,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import com.cvc953.localplayer.model.Song
 import com.cvc953.localplayer.preferences.AppPrefs
@@ -51,7 +52,8 @@ class PlayerController(
     private var playbackFadeJob: Job? = null
     private var fixedAudioSessionId: Int = 0
     private val appPrefs by lazy { AppPrefs(context.applicationContext) }
-    private val timerScope = scope ?: CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val internalScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val timerScope = internalScope
     private val fallbackEqualizerController by lazy {
         EqualizerController(context.applicationContext as Application)
     }
@@ -168,6 +170,13 @@ class PlayerController(
 
         mediaPlayer =
             MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build(),
+                )
+                setWakeMode(context, PowerManager.PARTIAL_WAKE_LOCK)
                 val preferredSessionId = getOrCreateAudioSessionId()
                 if (preferredSessionId != 0) {
                     try {
@@ -182,7 +191,6 @@ class PlayerController(
                 }
                 setDataSource(context, song.uri)
                 setOnPreparedListener { mp ->
-                    // Si hay un seek pendiente, hacerlo aquí
                     pendingSeek?.let { pos ->
                         try {
                             mp.seekTo(pos.toInt())
@@ -191,7 +199,6 @@ class PlayerController(
                         pendingSeek = null
                     }
 
-                    // Actualizar duración real al preparar
                     val realDuration =
                         try {
                             mp.duration.toLong()
@@ -218,32 +225,14 @@ class PlayerController(
                         }
                     }
                     if (onReadyToAttachEffects != null && sid != 0) {
-                        // Delegar start() al callback para iniciar solo cuando los efectos queden listos.
                         onReadyToAttachEffects?.invoke(sid, startPlayback)
                     } else {
-                        // Fallback: asegurar que el ecualizador quede listo incluso sin listener externo.
                         if (sid != 0) {
                             ensureFallbackEffectsReady(sid)
                         }
                         onAudioSessionIdChanged?.invoke(sid)
                         startPlayback()
                     }
-
-                    /*if (!startPaused || pendingResume) {
-                        try {
-                            mp.start()
-                        } catch (_: Exception) {
-                        }
-                        pendingResume = false
-                    }
-
-                    // Notify audio session id changed immediately after audio starts
-                    try {
-                        val sid = audioSessionId
-                        onAudioSessionIdChanged?.invoke(sid)
-                    } catch (t: Throwable) {
-                        Log.w("PlayerController", "onAudioSessionIdChanged invoke failed", t)
-                    }*/
                 }
                 prepareAsync()
                 setOnCompletionListener {
@@ -277,6 +266,13 @@ class PlayerController(
                         }
                     }
                 }
+                setOnErrorListener { _, what, extra ->
+                    Log.e("PlayerController", "MediaPlayer error: what=$what extra=$extra")
+                    _state.update { it.copy(isPlaying = false) }
+                    releaseAudioFocus()
+                    progressJob?.cancel()
+                    true
+                }
             }
 
         // Inicializar el estado con la duración del Song, se actualizará al preparar
@@ -287,9 +283,6 @@ class PlayerController(
 
     fun setOnAudioSessionIdChangedListener(listener: ((Int) -> Unit)?) {
         onAudioSessionIdChanged = listener
-        try {
-        } catch (_: Exception) {
-        }
     }
 
     fun setRepeatMode(mode: RepeatMode) {
@@ -298,9 +291,8 @@ class PlayerController(
 
     private fun startProgressUpdates() {
         progressJob?.cancel()
-        val s = scope ?: return
         progressJob =
-            s.launch {
+            internalScope.launch {
                 while (true) {
                     try {
                         val mp = mediaPlayer ?: break
@@ -557,18 +549,19 @@ class PlayerController(
                     AudioFocusRequest
                         .Builder(AudioManager.AUDIOFOCUS_GAIN)
                         .setAudioAttributes(audioAttributes)
+                        .setAcceptsDelayedFocusGain(true)
+                        .setWillPauseWhenDucked(false)
                         .setOnAudioFocusChangeListener(this)
                         .build()
 
-                val result = audioManager.requestAudioFocus(audioFocusRequest!!)
+                audioManager.requestAudioFocus(audioFocusRequest!!)
             } else {
                 @Suppress("DEPRECATION")
-                val result =
-                    audioManager.requestAudioFocus(
-                        this,
-                        AudioManager.STREAM_MUSIC,
-                        AudioManager.AUDIOFOCUS_GAIN,
-                    )
+                audioManager.requestAudioFocus(
+                    this,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN,
+                )
             }
             pausedByAudioFocus = false
             duckedByAudioFocus = false
@@ -577,10 +570,6 @@ class PlayerController(
         }
     }
 
-    /**
-     * Release audio focus when playback ends.
-     * Allows other apps to play audio.
-     */
     private fun releaseAudioFocus() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -593,31 +582,24 @@ class PlayerController(
             }
             pausedByAudioFocus = false
             duckedByAudioFocus = false
+            playbackFadeJob?.cancel()
         } catch (e: Exception) {
             Log.w("PlayerController", "Error releasing audio focus", e)
         }
     }
 
-    /**
-     * Handle audio focus changes from the system.
-     * Called when another app gains focus or when we regain focus.
-     */
     override fun onAudioFocusChange(focusChange: Int) {
         when (focusChange) {
             AudioManager.AUDIOFOCUS_GAIN -> {
-                // We gained audio focus, resume playback if we paused due to focus loss
                 if (duckedByAudioFocus) {
-                    try {
-                        mediaPlayer?.setVolume(1f, 1f)
-                    } catch (_: Exception) {
-                    }
                     duckedByAudioFocus = false
+                    fadeVolume(from = 0.2f, to = 1f, durationMs = 350L)
                 }
                 if (pausedByAudioFocus && mediaPlayer != null) {
                     try {
                         mediaPlayer?.setVolume(0f, 0f)
                         mediaPlayer?.start()
-                        mediaPlayer?.let { fadeInFromSilence(it) }
+                        fadeInFromSilence(mediaPlayer!!)
                         _state.update { it.copy(isPlaying = true) }
                         pausedByAudioFocus = false
                     } catch (e: Exception) {
@@ -627,7 +609,6 @@ class PlayerController(
             }
 
             AudioManager.AUDIOFOCUS_LOSS -> {
-                // We lost audio focus permanently, pause playback
                 try {
                     if (mediaPlayer?.isPlaying == true) {
                         mediaPlayer?.pause()
@@ -641,7 +622,6 @@ class PlayerController(
             }
 
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                // We lost audio focus temporarily (e.g., incoming call), pause playback
                 try {
                     if (mediaPlayer?.isPlaying == true) {
                         mediaPlayer?.pause()
@@ -655,13 +635,12 @@ class PlayerController(
             }
 
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                // We lost audio focus transiently but can continue playing at lower volume
-                // (e.g., navigation instructions, message notification)
                 try {
-                    // Reduce volume to 30% for ducking
-                    mediaPlayer?.setVolume(0.3f, 0.3f)
-                    pausedByAudioFocus = false
-                    duckedByAudioFocus = true
+                    if (mediaPlayer?.isPlaying == true) {
+                        duckedByAudioFocus = true
+                        pausedByAudioFocus = false
+                        fadeVolume(from = 1f, to = 0.2f, durationMs = 250L)
+                    }
                 } catch (e: Exception) {
                     Log.w("PlayerController", "Error applying audio duck", e)
                 }
@@ -669,35 +648,39 @@ class PlayerController(
         }
     }
 
-    private fun fadeInFromSilence(mp: MediaPlayer) {
-        val s = scope
-        if (s == null) {
-            try {
-                mp.setVolume(1f, 1f)
-            } catch (_: Exception) {
-            }
-            return
-        }
-
+    private fun fadeVolume(
+        from: Float,
+        to: Float,
+        durationMs: Long,
+        onComplete: (() -> Unit)? = null,
+    ) {
+        val mp = mediaPlayer ?: return
         playbackFadeJob?.cancel()
         playbackFadeJob =
-            s.launch {
-                val stepDelay = (fadeInDurationMs / fadeInSteps).coerceAtLeast(1L)
-                for (step in 1..fadeInSteps) {
+            internalScope.launch {
+                val steps = 8
+                val stepDelay = (durationMs / steps).coerceAtLeast(1L)
+                for (step in 1..steps) {
                     if (mediaPlayer !== mp) return@launch
-                    val v = step.toFloat() / fadeInSteps.toFloat()
+                    val fraction = step.toFloat() / steps.toFloat()
+                    val currentVolume = from + (to - from) * fraction
                     try {
-                        mp.setVolume(v, v)
+                        mp.setVolume(currentVolume, currentVolume)
                     } catch (_: Exception) {
                         return@launch
                     }
                     delay(stepDelay)
                 }
                 try {
-                    mp.setVolume(1f, 1f)
+                    mp.setVolume(to, to)
                 } catch (_: Exception) {
                 }
+                onComplete?.invoke()
             }
+    }
+
+    private fun fadeInFromSilence(mp: MediaPlayer) {
+        fadeVolume(from = 0f, to = 1f, durationMs = fadeInDurationMs)
     }
 
     private fun getOrCreateAudioSessionId(): Int {

@@ -264,7 +264,7 @@ fun MultiSongSelectionBar(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
                     LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                        items(playlists) { playlist ->
+                        items(playlists, key = { it.name }) { playlist ->
                             Card(
                                 modifier =
                                     Modifier

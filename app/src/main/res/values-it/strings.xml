@@ -274,7 +274,7 @@
     <string name="edit_details">Modifica dettagli</string>
     <string name="album_edit_track_count">Si applica a %d brani</string>
     <string name="album_edit_partial_failure_title">Alcuni brani non sono stati modificati</string>
-    <string name="album_edit_partial_failure_message">%d brani aggiornati, %d falliti</string>
+    <string name="album_edit_partial_failure_message">%1$d brani aggiornati, %2$d falliti</string>
     <string name="error_invalid_image">Immagine non valida</string>
     <string name="error_file_in_use">File in uso — chiudi altre app</string>
     <string name="error_format_not_writable">Questo formato non supporta la scrittura dei tag</string>

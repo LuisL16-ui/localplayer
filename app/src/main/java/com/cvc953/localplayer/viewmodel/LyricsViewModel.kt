@@ -10,6 +10,7 @@ import com.cvc953.localplayer.util.EmbeddedLyricsExtractor
 import com.cvc953.localplayer.util.LrcLine
 import com.cvc953.localplayer.util.isInstrumentalContent
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -18,6 +19,7 @@ import java.io.File
 class LyricsViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
+    private var lyricsJob: Job? = null
     private val _lyrics = MutableStateFlow<List<LrcLine>>(emptyList())
     val lyrics: StateFlow<List<LrcLine>> = _lyrics
     private val _ttmlLyrics = MutableStateFlow<TtmlLyrics?>(null)
@@ -30,7 +32,8 @@ class LyricsViewModel(
     val isInstrumental: StateFlow<Boolean> = _isInstrumental
 
     fun loadLyricsForSong(song: Song) {
-        viewModelScope.launch(Dispatchers.IO) {
+        lyricsJob?.cancel()
+        lyricsJob = viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
             _isInstrumental.value = false
             _error.value = null

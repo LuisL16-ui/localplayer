@@ -273,7 +273,7 @@
     <string name="edit_details">Edit details</string>
     <string name="album_edit_track_count">Applies to %d tracks</string>
     <string name="album_edit_partial_failure_title">Some tracks failed</string>
-    <string name="album_edit_partial_failure_message">%d tracks updated, %d failed</string>
+    <string name="album_edit_partial_failure_message">%1$d tracks updated, %2$d failed</string>
     <string name="error_invalid_image">Invalid image</string>
     <string name="error_file_in_use">File in use — close other apps</string>
     <string name="error_format_not_writable">This format does not support tag writing</string>

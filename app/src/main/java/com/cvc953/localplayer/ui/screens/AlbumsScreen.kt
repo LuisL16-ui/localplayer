@@ -83,6 +83,7 @@ import com.cvc953.localplayer.ui.components.ScrollLetterDisplay
 import com.cvc953.localplayer.ui.extendedColors
 import com.cvc953.localplayer.ui.theme.md_textSecondary
 import com.cvc953.localplayer.util.ArtworkLoader
+import com.cvc953.localplayer.util.getSongsForAlbum
 import com.cvc953.localplayer.viewmodel.AlbumViewModel
 import com.cvc953.localplayer.viewmodel.PlaybackViewModel
 import com.cvc953.localplayer.viewmodel.PlayerViewModel
@@ -125,29 +126,7 @@ fun AlbumsScreen(
         }
     }
 
-    // Agrupar álbumes por artista usando normalización
-    data class AlbumKey(
-        val name: String,
-        val artist: String,
-    )
-    val expandedAlbums =
-        remember(albums) {
-            val seen = mutableSetOf<AlbumKey>()
-            val result = mutableListOf<Album>()
-            for (album in albums) {
-                val artistNames = normalizeArtistName(album.artist)
-                val mainArtist = artistNames.firstOrNull()?.trim() ?: album.artist.trim()
-                for (albumName in normalizeAlbumName(album.name)) {
-                    val normAlbum = albumName.trim()
-                    val normArtist = mainArtist
-                    val key = AlbumKey(normAlbum, normArtist)
-                    if (normAlbum.isNotEmpty() && normArtist.isNotEmpty() && seen.add(key)) {
-                        result.add(album.copy(name = normAlbum, artist = normArtist))
-                    }
-                }
-            }
-            result
-        }
+    val expandedAlbums = albums
 
     val filteredAlbums =
         remember(expandedAlbums, searchQuery) {
@@ -415,24 +394,14 @@ fun AlbumsScreen(
                         item(span = { GridItemSpan(this.maxLineSpan) }) {
                             AlbumsHeaderCard(sortedAlbums = sortedAlbums)
                         }
-                        items(sortedAlbums) { album ->
+                        items(sortedAlbums, key = { "${it.name}_${it.artist}" }) { album ->
                             val context = LocalContext.current
-                            // Buscar la primera canción usando normalización para coincidencia real
-                            val firstSong =
-                                songs.firstOrNull { song ->
-                                    normalizeAlbumName(song.album).any {
-                                        it.equals(
-                                            album.name.trim(),
-                                            ignoreCase = true,
-                                        )
-                                    } &&
-                                        normalizeArtistName(song.artist).any {
-                                            it.equals(
-                                                album.artist.trim(),
-                                                ignoreCase = true,
-                                            )
-                                        }
+                            val albumSongs =
+                                remember(album.name, album.artist, songs) {
+                                    getSongsForAlbum(songs, album.name, album.artist)
+                                        .sortedWith(compareBy<Song>({ it.discNumber }, { it.trackNumber }))
                                 }
+                            val firstSong = albumSongs.firstOrNull()
                             var albumArt by remember(firstSong?.uri) { mutableStateOf<Bitmap?>(null) }
 
                             LaunchedEffect(firstSong?.uri, firstSong?.filePath) {
@@ -474,33 +443,7 @@ contentDescription = stringResource(R.string.action_more_options),
                                             containerColor = MaterialTheme.extendedColors.surfaceSheet,
                                             modifier = Modifier.Companion.background(MaterialTheme.extendedColors.surfaceSheet),
                                         ) {
-                                            // Solo usar las canciones del álbum actual para el dropdown (más rápido)
-                                            val albumSongs =
-                                                songs
-                                                    .filter { song ->
-                                                        normalizeAlbumName(
-                                                            song.album,
-                                                        ).any {
-                                                            it.equals(
-                                                                album.name.trim(),
-                                                                ignoreCase = true,
-                                                            )
-                                                        } &&
-                                                            normalizeArtistName(
-                                                                song.artist,
-                                                            ).any {
-                                                                it.equals(
-                                                                    album.artist.trim(),
-                                                                    ignoreCase = true,
-                                                                )
-                                                            }
-                                                    }.sortedWith(
-                                                        compareBy<Song>(
-                                                            { it.discNumber },
-                                                            { it.trackNumber },
-                                                        ),
-                                                    )
-                                            val firstSongOfAlbum = albumSongs.firstOrNull()
+                                             val firstSongOfAlbum = firstSong
 
                                             DropdownMenuItem(
                                                 text = {
@@ -592,23 +535,8 @@ contentDescription = stringResource(R.string.action_more_options),
                                     textAlign = TextAlign.Companion.Center,
                                     overflow = TextOverflow.Companion.Ellipsis,
                                 )
-                                // Contar canciones igual que en AlbumDetailScreen (solo primer artista normalizado)
-                                val mainArtist =
-                                    normalizeArtistName(album.artist).firstOrNull() ?: album.artist
-                                val songCount =
-                                    songs.count { song ->
-                                        normalizeAlbumName(song.album).any {
-                                            it.equals(
-                                                album.name.trim(),
-                                                ignoreCase = true,
-                                            )
-                                        } &&
-                                            normalizeArtistName(song.artist)
-                                                .firstOrNull()
-                                                ?.equals(mainArtist, ignoreCase = true) == true
-                                    }
                                 Text(
-                                    text = stringResource(R.string.songs_count, songCount),
+                                    text = stringResource(R.string.songs_count, album.songCount),
                                     color = MaterialTheme.extendedColors.textSecondary,
                                     fontSize = 12.sp,
                                 )
@@ -631,15 +559,14 @@ contentDescription = stringResource(R.string.action_more_options),
                         item {
                             AlbumsHeaderCard(sortedAlbums = sortedAlbums)
                         }
-                        items(sortedAlbums) { album ->
+                        items(sortedAlbums, key = { "${it.name}_${it.artist}" }) { album ->
                             val context = LocalContext.current
-                            val firstSong =
-                                songs.firstOrNull {
-                                    it.album.trim().equals(album.name.trim(), ignoreCase = true) &&
-                                        it.artist
-                                            .trim()
-                                            .equals(album.artist.trim(), ignoreCase = true)
+                            val albumSongs =
+                                remember(album.name, album.artist, songs) {
+                                    getSongsForAlbum(songs, album.name, album.artist)
+                                        .sortedWith(compareBy<Song>({ it.discNumber }, { it.trackNumber }))
                                 }
+                            val firstSong = albumSongs.firstOrNull()
                             var albumArt by remember(firstSong?.uri) { mutableStateOf<Bitmap?>(null) }
 
                             LaunchedEffect(firstSong?.uri, firstSong?.filePath) {
@@ -716,24 +643,6 @@ contentDescription = stringResource(R.string.action_more_options),
                                             },
                                             onClick = {
                                                 menuExpanded = false
-                                                // Obtener canciones del álbum
-                                                val albumSongs =
-                                                    songs
-                                                        .filter {
-                                                            it.album.trim().equals(
-                                                                album.name.trim(),
-                                                                ignoreCase = true,
-                                                            ) &&
-                                                                it.artist.trim().equals(
-                                                                    album.artist.trim(),
-                                                                    ignoreCase = true,
-                                                                )
-                                                        }.sortedWith(
-                                                            compareBy<Song>(
-                                                                { it.discNumber },
-                                                                { it.trackNumber },
-                                                            ),
-                                                        )
                                                 if (albumSongs.isNotEmpty()) {
                                                     playbackViewModel.setShuffle(false)
                                                     playbackViewModel.playAlbum(
@@ -756,24 +665,6 @@ contentDescription = stringResource(R.string.action_more_options),
                                             },
                                             onClick = {
                                                 menuExpanded = false
-                                                // Añadir todas las canciones del álbum como siguientes (sin duplicar)
-                                                val albumSongs =
-                                                    songs
-                                                        .filter {
-                                                            it.album.trim().equals(
-                                                                album.name.trim(),
-                                                                ignoreCase = true,
-                                                            ) &&
-                                                                it.artist.trim().equals(
-                                                                    album.artist.trim(),
-                                                                    ignoreCase = true,
-                                                                )
-                                                        }.sortedWith(
-                                                            compareBy<Song>(
-                                                                { it.discNumber },
-                                                                { it.trackNumber },
-                                                            ),
-                                                        )
                                                 val currentQueue = playbackViewModel.queue.value
                                                 val toAdd =
                                                     albumSongs.filter { song -> currentQueue.none { it.id == song.id } }
@@ -797,24 +688,6 @@ contentDescription = stringResource(R.string.action_more_options),
                                             },
                                             onClick = {
                                                 menuExpanded = false
-                                                // Añadir todas las canciones del álbum al final (sin duplicar)
-                                                val albumSongs =
-                                                    songs
-                                                        .filter {
-                                                            it.album.trim().equals(
-                                                                album.name.trim(),
-                                                                ignoreCase = true,
-                                                            ) &&
-                                                                it.artist.trim().equals(
-                                                                    album.artist.trim(),
-                                                                    ignoreCase = true,
-                                                                )
-                                                        }.sortedWith(
-                                                            compareBy<Song>(
-                                                                { it.discNumber },
-                                                                { it.trackNumber },
-                                                            ),
-                                                        )
                                                 val currentQueue = playbackViewModel.queue.value
                                                 val toAdd =
                                                     albumSongs.filter { song -> currentQueue.none { it.id == song.id } }
@@ -880,9 +753,5 @@ private enum class AlbumSortMode {
     TITLE_DESC,
 }
 
-// Normaliza nombres de álbumes, separando por ',' y '/' (puedes ajustar si hay excepciones)
-fun normalizeAlbumName(albumName: String): List<String> {
-    // Los álbumes NO deben dividirse por comas, solo trimear
-    val trimmed = albumName.trim()
-    return if (trimmed.isNotEmpty()) listOf(trimmed) else emptyList()
-}
+fun normalizeAlbumName(albumName: String): List<String> =
+    com.cvc953.localplayer.util.normalizeAlbumName(albumName)

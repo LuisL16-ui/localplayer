@@ -180,11 +180,11 @@ fun PlayerScreen(
     val hasLyrics = ttmlLyrics?.lines?.isNotEmpty() == true || (lyrics.isNotEmpty() && !isInstrumental)
     var lyricsPosition by remember { mutableLongStateOf(0L) }
 
-    LaunchedEffect(playerState.isPlaying, hasLyrics) {
-        if (!playerState.isPlaying || !hasLyrics) return@LaunchedEffect
+    LaunchedEffect(isExpanded, showLyrics, playerState.isPlaying, hasLyrics) {
+        if (!isExpanded || !showLyrics || !playerState.isPlaying || !hasLyrics) return@LaunchedEffect
         while (true) {
-            withFrameNanos { }
             lyricsPosition = playbackViewModel.getCurrentPosition()
+            kotlinx.coroutines.delay(40L)
         }
     }
 
@@ -878,7 +878,7 @@ fun PlayerScreen(
                                         max = 200.dp,
                                     ),
                             ) {
-                                items(playlists) { playlist ->
+                                items(playlists, key = { it.name }) { playlist ->
                                     Card(
                                         modifier =
                                             Modifier

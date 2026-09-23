@@ -467,7 +467,7 @@ fun SongsContent(
                             }
                         }
 
-                        items(sortedSongs) { song ->
+                        items(sortedSongs, key = { it.id }) { song ->
                             val isCurrent =
                                 playerState.currentSong?.id == song.id
 

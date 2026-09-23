@@ -5,7 +5,7 @@ import android.graphics.Canvas
 
 fun createCombinedAlbumArt(
     bitmaps: List<Bitmap?>,
-    size: Int = 1024,
+    size: Int = 384,
 ): Bitmap {
     val canvas = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvasDrawer = Canvas(canvas)
@@ -16,44 +16,45 @@ fun createCombinedAlbumArt(
 
     val halfSize = size / 2
 
+    fun drawAndRecycle(bmp: Bitmap, w: Int, h: Int, x: Float, y: Float) {
+        val scaled = Bitmap.createScaledBitmap(bmp, w, h, true)
+        canvasDrawer.drawBitmap(scaled, x, y, null)
+        if (scaled != bmp) {
+            try {
+                scaled.recycle()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     when (count) {
         1 -> {
             val bitmap = bitmaps[0] ?: return canvas
-            val scaledBitmap = Bitmap.createScaledBitmap(bitmap, size, size, true)
-            canvasDrawer.drawBitmap(scaledBitmap, 0f, 0f, null)
+            drawAndRecycle(bitmap, size, size, 0f, 0f)
         }
 
         2 -> {
             for (i in 0 until 2) {
                 val bitmap = bitmaps[i] ?: continue
-                val scaledBitmap = Bitmap.createScaledBitmap(bitmap, halfSize, size, true)
-                val x = i * halfSize
-                canvasDrawer.drawBitmap(scaledBitmap, x.toFloat(), 0f, null)
+                drawAndRecycle(bitmap, halfSize, size, (i * halfSize).toFloat(), 0f)
             }
         }
 
         3 -> {
             val leftBitmap = bitmaps[0]
             if (leftBitmap != null) {
-                val scaledLeft = Bitmap.createScaledBitmap(leftBitmap, halfSize, size, true)
-                canvasDrawer.drawBitmap(scaledLeft, 0f, 0f, null)
+                drawAndRecycle(leftBitmap, halfSize, size, 0f, 0f)
             }
             for (i in 1 until 3) {
                 val bitmap = bitmaps[i] ?: continue
-                val scaledBitmap = Bitmap.createScaledBitmap(bitmap, halfSize, halfSize, true)
-                val x = halfSize
-                val y = (i - 1) * halfSize
-                canvasDrawer.drawBitmap(scaledBitmap, x.toFloat(), y.toFloat(), null)
+                drawAndRecycle(bitmap, halfSize, halfSize, halfSize.toFloat(), ((i - 1) * halfSize).toFloat())
             }
         }
 
         else -> {
             for (i in 0 until 4) {
                 val bitmap = bitmaps[i] ?: continue
-                val scaledBitmap = Bitmap.createScaledBitmap(bitmap, halfSize, halfSize, true)
-                val x = (i % 2) * halfSize
-                val y = (i / 2) * halfSize
-                canvasDrawer.drawBitmap(scaledBitmap, x.toFloat(), y.toFloat(), null)
+                drawAndRecycle(bitmap, halfSize, halfSize, ((i % 2) * halfSize).toFloat(), ((i / 2) * halfSize).toFloat())
             }
         }
     }

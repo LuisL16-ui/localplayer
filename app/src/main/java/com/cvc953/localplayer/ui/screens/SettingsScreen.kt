@@ -375,9 +375,7 @@ fun SettingsScreen(
                                             if (languageCode != "sistema") {
                                                 val locale =
                                                     when (languageCode) {
-                                                        "es" -> java.util.Locale("es")
-                                                        "en" -> java.util.Locale("en")
-                                                        "it" -> java.util.Locale("it")
+                                                        "es", "en", "it" -> java.util.Locale.forLanguageTag(languageCode)
                                                         else -> java.util.Locale.getDefault()
                                                     }
                                                 val config = android.content.res.Configuration(context.resources.configuration)
@@ -466,7 +464,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(predefinedThemeColors) { themeColor ->
+                        items(predefinedThemeColors, key = { it.hex }) { themeColor ->
                             val isSelected = themeColor.hex == primaryColorHex
                             val borderColor =
                                 if (isSelected) themeColor.color else Color.Transparent

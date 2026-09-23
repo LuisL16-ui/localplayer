@@ -5,9 +5,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.AudioManager
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
@@ -23,6 +27,7 @@ import com.cvc953.localplayer.R
 import androidx.media.session.MediaButtonReceiver
 import com.cvc953.localplayer.controller.PlayerController
 import com.cvc953.localplayer.preferences.AppPrefs
+import com.cvc953.localplayer.util.ArtworkLoader
 import com.cvc953.localplayer.widget.PlayerWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,8 +59,20 @@ class MusicService : Service() {
 
     private lateinit var mediaSession: MediaSessionCompat
     private var serviceJob: Job? = null
+    private var albumArtJob: Job? = null
     private lateinit var serviceScope: CoroutineScope
     private lateinit var playerController: PlayerController
+    private var isNoisyReceiverRegistered = false
+
+    private val becomingNoisyReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                if (playerController.state.value.isPlaying) {
+                    playerController.togglePlayPause()
+                }
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -122,6 +139,9 @@ class MusicService : Service() {
                     }
                 }
             }
+
+        registerReceiver(becomingNoisyReceiver, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
+        isNoisyReceiverRegistered = true
 
         val notification = createNotification()
         try {
@@ -395,54 +415,33 @@ class MusicService : Service() {
     }
 
     private fun loadAlbumArt(uri: String) {
-        Thread {
+        albumArtJob?.cancel()
+        albumArtJob = serviceScope.launch(Dispatchers.IO) {
             try {
-                // Si cambió la canción mientras se estaba cargando, cancela
-                if (currentSongUri != uri) {
-                    return@Thread
-                }
-
-                val retriever = MediaMetadataRetriever()
-                retriever.setDataSource(this, Uri.parse(uri))
-                val art = retriever.embeddedPicture
-                retriever.release()
-
-                // Verificar nuevamente si la canción cambió
-                if (currentSongUri != uri) {
-                    return@Thread
-                }
-
-                if (art != null && art.isNotEmpty()) {
-                    val bitmap = BitmapFactory.decodeByteArray(art, 0, art.size)
-                    if (bitmap != null) {
-                        val scaledBitmap = bitmap.scale(512, 512)
-
-                        // Replace cached album art (do not recycle previous bitmap here)
-                        albumArt = scaledBitmap
-                        if (bitmap != scaledBitmap) {
-                            try {
-                                bitmap.recycle()
-                            } catch (_: Exception) {
-                            }
-                        }
-
-                        updateMediaSession()
-                        updateNotification()
-                    }
-                } else {
-                    albumArt = null
-                }
+                if (currentSongUri != uri) return@launch
+                val bitmap = ArtworkLoader.loadThumbnail(this@MusicService, Uri.parse(uri), targetSizePx = 512)
+                if (currentSongUri != uri) return@launch
+                albumArt = bitmap
+                updateMediaSession()
+                updateNotification()
             } catch (e: Exception) {
                 Log.e("MusicService", "Error loading album art: ${e.message}")
                 albumArt = null
             }
-        }.start()
+        }
     }
 
     override fun onDestroy() {
-        // Don't explicitly recycle albumArt; let the system GC handle it to avoid races
+        if (isNoisyReceiverRegistered) {
+            try {
+                unregisterReceiver(becomingNoisyReceiver)
+            } catch (_: Exception) {
+            }
+            isNoisyReceiverRegistered = false
+        }
+        albumArtJob?.cancel()
         serviceJob?.cancel()
-        serviceScope?.cancel()
+        serviceScope.cancel()
         mediaSession.isActive = false
         mediaSession.release()
         super.onDestroy()

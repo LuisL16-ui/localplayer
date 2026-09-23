@@ -298,4 +298,13 @@ class EqualizerViewModel(
     }
 
     private fun sanitizePresetNames(input: List<String>): List<String> = input.map { sanitizePresetName(it) }
+
+    override fun onCleared() {
+        super.onCleared()
+        try {
+            PlayerController.getInstance(getApplication()).setOnReadyToAttachEffectsListener(null)
+            equalizerController.release()
+        } catch (_: Exception) {
+        }
+    }
 }

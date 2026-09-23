@@ -23,9 +23,9 @@ import kotlinx.coroutines.withContext
 
 /** LRU cache for combined playlist album art, keyed by playlist song IDs hash. */
 private val albumArtCache =
-    object : LinkedHashMap<Int, Bitmap>(64, 0.75f, true) {
+    object : LinkedHashMap<Int, Bitmap>(32, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Bitmap>): Boolean =
-            size > 48
+            size > 24
     }
 
 @Suppress("ktlint:standard:function-naming")
