@@ -77,7 +77,7 @@ class PlayerController(
     ) {
         val isSameQueue = queue.size == songs.size && queue.zip(songs).all { it.first.id == it.second.id }
         val isSameIndex = currentIndex == startIndex
-        if (isSameQueue && isSameIndex && currentIndex in queue.indices) {
+        if (isSameQueue && isSameIndex && currentIndex in queue.indices && isPlaying()) {
             // Ya está sonando la misma canción en la misma posición, no reiniciar
             return
         }
@@ -186,7 +186,7 @@ class PlayerController(
                     }
                 }
                 try {
-                    setVolume(0f, 0f)
+                    setVolume(1f, 1f)
                 } catch (_: Exception) {
                 }
                 setDataSource(context, song.uri)
@@ -213,24 +213,32 @@ class PlayerController(
                         } catch (_: Exception) {
                             preferredSessionId
                         }
+                    var hasStartedPlayback = false
                     val startPlayback = {
-                        if (!startPaused || pendingResume) {
+                        if (!hasStartedPlayback && (!startPaused || pendingResume)) {
+                            hasStartedPlayback = true
                             try {
-                                mp.setVolume(0f, 0f)
+                                mp.setVolume(1f, 1f)
                                 mp.start()
-                                fadeInFromSilence(mp)
-                            } catch (_: Exception) {
+                            } catch (e: Exception) {
+                                Log.e("PlayerController", "Error starting MediaPlayer", e)
                             }
                             pendingResume = false
+                            _state.update { it.copy(isPlaying = true) }
+                            startProgressUpdates()
                         }
                     }
+                    if (sid != 0) {
+                        ensureFallbackEffectsReady(sid)
+                    }
+                    onAudioSessionIdChanged?.invoke(sid)
                     if (onReadyToAttachEffects != null && sid != 0) {
                         onReadyToAttachEffects?.invoke(sid, startPlayback)
-                    } else {
-                        if (sid != 0) {
-                            ensureFallbackEffectsReady(sid)
+                        internalScope.launch {
+                            delay(300L)
+                            startPlayback()
                         }
-                        onAudioSessionIdChanged?.invoke(sid)
+                    } else {
                         startPlayback()
                     }
                 }
@@ -302,18 +310,29 @@ class PlayerController(
             internalScope.launch {
                 while (true) {
                     try {
-                        val mp = mediaPlayer ?: break
-                        val pos =
-                            try {
-                                mp.currentPosition.toLong()
-                            } catch (_: IllegalStateException) {
-                                break
+                        val mp = mediaPlayer
+                        if (mp != null) {
+                            val isPlaying =
+                                try {
+                                    mp.isPlaying
+                                } catch (_: Exception) {
+                                    false
+                                }
+                            if (isPlaying) {
+                                val pos =
+                                    try {
+                                        mp.currentPosition.toLong()
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                if (pos != null) {
+                                    _state.update { it.copy(position = pos) }
+                                }
                             }
-                        _state.update { it.copy(position = pos) }
+                        }
                     } catch (_: Exception) {
-                        break
                     }
-                    delay(1000L)
+                    delay(500L)
                 }
             }
     }
@@ -330,24 +349,19 @@ class PlayerController(
             try {
                 if (mp.isPlaying) {
                     mp.pause()
+                    _state.update { s -> s.copy(isPlaying = false) }
                 } else {
-                    mp.setVolume(0f, 0f)
+                    mp.setVolume(1f, 1f)
                     mp.start()
-                    fadeInFromSilence(mp)
+                    val pos =
+                        try {
+                            mp.currentPosition.toLong()
+                        } catch (_: Exception) {
+                            _state.value.position
+                        }
+                    _state.update { s -> s.copy(isPlaying = true, position = pos) }
+                    startProgressUpdates()
                 }
-                val isPlaying =
-                    try {
-                        mp.isPlaying
-                    } catch (_: IllegalStateException) {
-                        false
-                    }
-                val pos =
-                    try {
-                        mp.currentPosition.toLong()
-                    } catch (_: IllegalStateException) {
-                        _state.value.position
-                    }
-                _state.update { s -> s.copy(isPlaying = isPlaying, position = pos) }
             } catch (_: IllegalStateException) {
                 // ignore invalid state transitions
                 _state.update { s -> s.copy(isPlaying = false) }
@@ -374,9 +388,8 @@ class PlayerController(
         }
         mediaPlayer?.let { mp ->
             try {
-                mp.setVolume(0f, 0f)
+                mp.setVolume(1f, 1f)
                 mp.start()
-                fadeInFromSilence(mp)
             } catch (_: Exception) {
             }
         }
@@ -434,15 +447,8 @@ class PlayerController(
 
     fun seekTo(position: Long) {
         mediaPlayer?.let { mp ->
-            val wasPlaying =
-                try {
-                    mp.isPlaying
-                } catch (_: Exception) {
-                    false
-                }
             try {
                 mp.seekTo(position.toInt())
-                if (!wasPlaying) mp.pause() // Forzar pausa si estaba en pausa
             } catch (_: Exception) {
             }
         }
@@ -606,10 +612,10 @@ class PlayerController(
                 }
                 if (pausedByAudioFocus && mediaPlayer != null) {
                     try {
-                        mediaPlayer?.setVolume(0f, 0f)
+                        mediaPlayer?.setVolume(1f, 1f)
                         mediaPlayer?.start()
-                        fadeInFromSilence(mediaPlayer!!)
                         _state.update { it.copy(isPlaying = true) }
+                        startProgressUpdates()
                         pausedByAudioFocus = false
                     } catch (e: Exception) {
                         Log.w("PlayerController", "Error resuming after audio focus gain", e)
@@ -689,7 +695,10 @@ class PlayerController(
     }
 
     private fun fadeInFromSilence(mp: MediaPlayer) {
-        fadeVolume(from = 0f, to = 1f, durationMs = fadeInDurationMs)
+        try {
+            mp.setVolume(1f, 1f)
+        } catch (_: Exception) {
+        }
     }
 
     private fun getOrCreateAudioSessionId(): Int {
