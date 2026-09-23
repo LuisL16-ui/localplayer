@@ -67,7 +67,7 @@ import kotlinx.coroutines.withContext
 @Suppress("ktlint:standard:function-naming")
 @Composable
 fun AlbumHeader(
-    viewModel: AlbumViewModel,
+    albumViewModel: AlbumViewModel,
     albumName: String,
     artistName: String,
     playbackViewModel: PlaybackViewModel,
@@ -76,7 +76,7 @@ fun AlbumHeader(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
 
-    val songViewModel: SongViewModel = viewModel()
+    val songViewModel: SongViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val songs by songViewModel.songs.collectAsState()
     val albumSongs =
         remember(songs, albumName, artistName) {

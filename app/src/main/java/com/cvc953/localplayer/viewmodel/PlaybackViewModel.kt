@@ -858,6 +858,7 @@ class PlaybackViewModel(
     }
 
     override fun onCleared() {
+        playerController.setOnReadyToAttachEffectsListener(null)
         super.onCleared()
         try {
             startupEqualizerController.release()

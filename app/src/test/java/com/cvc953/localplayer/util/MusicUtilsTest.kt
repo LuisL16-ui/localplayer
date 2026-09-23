@@ -31,6 +31,7 @@ class MusicUtilsTest {
         assertEquals(listOf("Carín León", "Luis Mexia"), normalizeArtistName("Carín León & Luis Mexia"))
         assertEquals(listOf("Emilia", "LUDMILLA", "ZECCA"), normalizeArtistName("Emilia, LUDMILLA, & ZECCA"))
         assertEquals(listOf("Santi Celli", "Ale Sergi"), normalizeArtistName("Santi Celli (feat. Ale Sergi)"))
+        assertEquals(listOf("Taylor Swift", "Post Malone"), normalizeArtistName("Taylor Swift (with Post Malone)"))
         assertEquals(listOf("Carlos Vives", "Emilia", "Wisin", "Xavi"), normalizeArtistName("Carlos Vives, ,, Emilia, Wisin, &, Xavi"))
         assertEquals(listOf("AC/DC"), normalizeArtistName("AC/DC"))
     }

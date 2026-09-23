@@ -10,7 +10,7 @@ fun normalizeArtistName(artist: String): List<String> {
 
     val placeholder = "___ACDC___"
     var text = trimmed.replace("AC/DC", placeholder, ignoreCase = true)
-    text = text.replace(Regex("""[\(\[](?:feat\.?|ft\.?|featuring)\s+([^\)\]]+)[\)\]]""", RegexOption.IGNORE_CASE)) { matchResult ->
+    text = text.replace(Regex("""[\(\[](?:feat\.?|ft\.?|featuring|with)\s+([^\)\]]+)[\)\]]""", RegexOption.IGNORE_CASE)) { matchResult ->
         ", " + matchResult.groupValues[1]
     }
     text = text.replace(Regex("""(?i)\s+(?:feat\.?|ft\.?|featuring|with)\s+"""), ", ")
@@ -65,7 +65,7 @@ fun groupSongsIntoAlbums(songs: List<Song>): List<Album> {
             val songArtists = normalizeArtistName(song.artist).map { it.lowercase() }
             val songFolder = song.filePath?.let { File(it).parent }
 
-            val matchingCluster = clusters.find { cluster ->
+            val matchingClusters = clusters.filter { cluster ->
                 cluster.any { other ->
                     val otherFolder = other.filePath?.let { File(it).parent }
                     val sameFolder = songFolder != null && otherFolder != null && songFolder == otherFolder
@@ -76,10 +76,18 @@ fun groupSongsIntoAlbums(songs: List<Song>): List<Album> {
                 }
             }
 
-            if (matchingCluster != null) {
-                matchingCluster.add(song)
-            } else {
+            if (matchingClusters.isEmpty()) {
                 clusters.add(mutableListOf(song))
+            } else {
+                val primaryCluster = matchingClusters.first()
+                primaryCluster.add(song)
+                if (matchingClusters.size > 1) {
+                    for (i in 1 until matchingClusters.size) {
+                        val toMerge = matchingClusters[i]
+                        primaryCluster.addAll(toMerge)
+                        clusters.remove(toMerge)
+                    }
+                }
             }
         }
 
@@ -111,8 +119,20 @@ fun getSongsForAlbum(
     artistName: String,
 ): List<Song> {
     val cleanAlbumName = albumName.trim()
-    val albumSongs = songs.filter { song ->
-        normalizeAlbumName(song.album).any { it.equals(cleanAlbumName, ignoreCase = true) }
+    val isUnknownAlbum = cleanAlbumName.isEmpty() ||
+        cleanAlbumName.equals("desconocido", ignoreCase = true) ||
+        cleanAlbumName.equals("<unknown>", ignoreCase = true) ||
+        cleanAlbumName.equals("unknown", ignoreCase = true)
+
+    val albumSongs = if (isUnknownAlbum) {
+        songs.filter { song ->
+            val a = song.album.trim().lowercase()
+            a.isEmpty() || a == "desconocido" || a == "<unknown>" || a == "unknown"
+        }
+    } else {
+        songs.filter { song ->
+            normalizeAlbumName(song.album).any { it.equals(cleanAlbumName, ignoreCase = true) }
+        }
     }
     if (albumSongs.isEmpty()) return emptyList()
 

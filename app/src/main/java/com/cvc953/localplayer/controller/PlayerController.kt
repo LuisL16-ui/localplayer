@@ -266,9 +266,16 @@ class PlayerController(
                         }
                     }
                 }
-                setOnErrorListener { _, what, extra ->
+                setOnErrorListener { mp, what, extra ->
                     Log.e("PlayerController", "MediaPlayer error: what=$what extra=$extra")
-                    _state.update { it.copy(isPlaying = false) }
+                    if (mediaPlayer === mp) {
+                        try {
+                            mediaPlayer?.release()
+                        } catch (_: Exception) {
+                        }
+                        mediaPlayer = null
+                        _state.update { it.copy(isPlaying = false) }
+                    }
                     releaseAudioFocus()
                     progressJob?.cancel()
                     true
@@ -549,7 +556,6 @@ class PlayerController(
                     AudioFocusRequest
                         .Builder(AudioManager.AUDIOFOCUS_GAIN)
                         .setAudioAttributes(audioAttributes)
-                        .setAcceptsDelayedFocusGain(true)
                         .setWillPauseWhenDucked(false)
                         .setOnAudioFocusChangeListener(this)
                         .build()

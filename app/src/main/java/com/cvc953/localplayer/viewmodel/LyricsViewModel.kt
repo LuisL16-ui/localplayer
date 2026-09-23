@@ -9,6 +9,7 @@ import com.cvc953.localplayer.model.TtmlLyrics
 import com.cvc953.localplayer.util.EmbeddedLyricsExtractor
 import com.cvc953.localplayer.util.LrcLine
 import com.cvc953.localplayer.util.isInstrumentalContent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +21,7 @@ class LyricsViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
     private var lyricsJob: Job? = null
+    private var currentLoadedSongId: Long? = null
     private val _lyrics = MutableStateFlow<List<LrcLine>>(emptyList())
     val lyrics: StateFlow<List<LrcLine>> = _lyrics
     private val _ttmlLyrics = MutableStateFlow<TtmlLyrics?>(null)
@@ -32,6 +34,8 @@ class LyricsViewModel(
     val isInstrumental: StateFlow<Boolean> = _isInstrumental
 
     fun loadLyricsForSong(song: Song) {
+        val requestedSongId = song.id
+        currentLoadedSongId = requestedSongId
         lyricsJob?.cancel()
         lyricsJob = viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
@@ -62,6 +66,7 @@ class LyricsViewModel(
                             val key = com.cvc953.localplayer.util.TtmlCache.keyForFile(ttmlFile.absolutePath, ttmlFile.lastModified())
                             val cached = com.cvc953.localplayer.util.TtmlCache.loadCached(getApplication(), key)
                             if (cached != null && cached.lines.isNotEmpty()) {
+                                if (currentLoadedSongId != requestedSongId) return@launch
                                 val lrcLines = cached.lines.map { com.cvc953.localplayer.util.LrcLine(it.timeMs, it.text) }
                                 _ttmlLyrics.value = cached
                                 _lyrics.value = lrcLines
@@ -73,6 +78,7 @@ class LyricsViewModel(
                                 val text = ttmlFile.readText()
                                 val parsed = com.cvc953.localplayer.util.TtmlParser.parseTtml(text)
                                 if (parsed.lines.isNotEmpty()) {
+                                    if (currentLoadedSongId != requestedSongId) return@launch
                                     _ttmlLyrics.value = parsed
                                     _lyrics.value = parsed.lines.map { com.cvc953.localplayer.util.LrcLine(it.timeMs, it.text) }
                                     try {
@@ -89,20 +95,21 @@ class LyricsViewModel(
                         if (lrcFile.exists()) {
                             val text = lrcFile.readText()
 
-                            // Detectar [Instrumental] en el texto crudo
+                            if (currentLoadedSongId != requestedSongId) return@launch
                             _isInstrumental.value = isInstrumentalContent(text)
 
                             val (lrcLines, ttml) = LyricsController.parseLyrics(text)
 
-                            // THE FIX: si no hay líneas con timestamp y no es instrumental → "sin letra"
                             val hasTimed = lrcLines.any { !it.isMetadata }
                             if (!hasTimed && !_isInstrumental.value) {
+                                if (currentLoadedSongId != requestedSongId) return@launch
                                 _ttmlLyrics.value = null
                                 _lyrics.value = emptyList()
                                 _isLoading.value = false
                                 return@launch
                             }
 
+                            if (currentLoadedSongId != requestedSongId) return@launch
                             _ttmlLyrics.value = ttml
                             _lyrics.value = lrcLines
                             _isLoading.value = false
@@ -111,10 +118,10 @@ class LyricsViewModel(
                     }
                 }
 
-                // 3. Si no hay archivos externos, probar letras embedidas en los tags del audio
                 if (!audioFilePath.isNullOrEmpty()) {
                     val embedded = EmbeddedLyricsExtractor.extract(audioFilePath, song.duration)
                     if (embedded != null) {
+                        if (currentLoadedSongId != requestedSongId) return@launch
                         val rawText = embedded.lrcLines.joinToString("\n") { it.text }
                         _isInstrumental.value = isInstrumentalContent(rawText)
                         _lyrics.value = embedded.lrcLines
@@ -124,17 +131,24 @@ class LyricsViewModel(
                     }
                 }
 
-                _ttmlLyrics.value = null
-                _lyrics.value = emptyList()
-                _isInstrumental.value = false
-                _error.value = "No se encontraron letras para la canción."
+                if (currentLoadedSongId == requestedSongId) {
+                    _ttmlLyrics.value = null
+                    _lyrics.value = emptyList()
+                    _isInstrumental.value = false
+                    _error.value = "No se encontraron letras para la canción."
+                }
             } catch (e: Exception) {
-                _ttmlLyrics.value = null
-                _lyrics.value = emptyList()
-                _isInstrumental.value = false
-                _error.value = "Error cargando letras: ${e.message}"
+                if (e is CancellationException) throw e
+                if (currentLoadedSongId == requestedSongId) {
+                    _ttmlLyrics.value = null
+                    _lyrics.value = emptyList()
+                    _isInstrumental.value = false
+                    _error.value = "Error cargando letras: ${e.message}"
+                }
             } finally {
-                _isLoading.value = false
+                if (currentLoadedSongId == requestedSongId) {
+                    _isLoading.value = false
+                }
             }
         }
     }

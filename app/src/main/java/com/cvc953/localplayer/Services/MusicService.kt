@@ -426,7 +426,9 @@ class MusicService : Service() {
                 updateNotification()
             } catch (e: Exception) {
                 Log.e("MusicService", "Error loading album art: ${e.message}")
-                albumArt = null
+                if (currentSongUri == uri) {
+                    albumArt = null
+                }
             }
         }
     }

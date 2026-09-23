@@ -394,7 +394,7 @@ fun AlbumsScreen(
                         item(span = { GridItemSpan(this.maxLineSpan) }) {
                             AlbumsHeaderCard(sortedAlbums = sortedAlbums)
                         }
-                        items(sortedAlbums, key = { "${it.name}_${it.artist}" }) { album ->
+                        items(sortedAlbums, key = { "${it.name}\u0000${it.artist}" }) { album ->
                             val context = LocalContext.current
                             val albumSongs =
                                 remember(album.name, album.artist, songs) {
@@ -559,7 +559,7 @@ contentDescription = stringResource(R.string.action_more_options),
                         item {
                             AlbumsHeaderCard(sortedAlbums = sortedAlbums)
                         }
-                        items(sortedAlbums, key = { "${it.name}_${it.artist}" }) { album ->
+                        items(sortedAlbums, key = { "${it.name}\u0000${it.artist}" }) { album ->
                             val context = LocalContext.current
                             val albumSongs =
                                 remember(album.name, album.artist, songs) {
