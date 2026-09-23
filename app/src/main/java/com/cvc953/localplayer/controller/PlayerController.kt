@@ -176,7 +176,12 @@ class PlayerController(
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .build(),
                 )
-                setWakeMode(context, PowerManager.PARTIAL_WAKE_LOCK)
+                try {
+                    if (context.checkSelfPermission(android.Manifest.permission.WAKE_LOCK) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        setWakeMode(context, PowerManager.PARTIAL_WAKE_LOCK)
+                    }
+                } catch (_: Exception) {
+                }
                 val preferredSessionId = getOrCreateAudioSessionId()
                 if (preferredSessionId != 0) {
                     try {
