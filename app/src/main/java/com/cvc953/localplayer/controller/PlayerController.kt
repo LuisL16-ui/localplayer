@@ -356,7 +356,10 @@ class PlayerController(
     }
 
     fun pause() {
-        mediaPlayer?.pause()
+        try {
+            mediaPlayer?.pause()
+        } catch (_: IllegalStateException) {
+        }
         _state.update { it.copy(isPlaying = false) }
         progressJob?.cancel()
     }

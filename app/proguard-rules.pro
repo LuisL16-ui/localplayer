@@ -52,4 +52,9 @@
 # Palette
 -keep class androidx.palette.** { *; }
 
--ignorewarnings
+# App core classes — keep entire app package to prevent R8 from stripping
+# singletons, coroutine lambdas, and reflection-accessed members
+-keep class com.cvc953.localplayer.** { *; }
+-dontwarn com.cvc953.localplayer.**
+
+-ignorewarnings
