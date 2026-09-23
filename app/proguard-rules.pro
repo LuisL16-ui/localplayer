@@ -41,4 +41,15 @@
 -keep class androidx.media3.** { *; }
 -dontwarn androidx.media3.**
 
+# ViewModels (keep public constructors for ViewModelProvider/Compose viewModel())
+-keepclassmembers class * extends androidx.lifecycle.ViewModel {
+    public <init>(...);
+}
+
+# Widgets
+-keep class com.cvc953.localplayer.widget.** { *; }
+
+# Palette
+-keep class androidx.palette.** { *; }
+
 -ignorewarnings
