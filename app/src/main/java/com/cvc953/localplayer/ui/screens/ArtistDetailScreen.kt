@@ -217,7 +217,7 @@ fun ArtistDetailScreen(
                     onViewAllSongs,
                 )
             }
-            items(visibleSongs) { song ->
+            items(visibleSongs, key = { it.id }) { song ->
                 val isCurrent = playerState.currentSong?.id == song.id
                 val addedNextMsg = stringResource(R.string.toast_added_next)
                 val addedQueueEndMsg = stringResource(R.string.toast_added_queue_end)
@@ -315,7 +315,7 @@ fun ArtistDetailScreen(
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            items(albums) { (albumName, albumSongs) ->
+                            items(albums, key = { it.first }) { (albumName, albumSongs) ->
                                 val representativeSong = albumSongs.firstOrNull()
                                 var albumArt by remember(representativeSong?.uri) {
                                     mutableStateOf<Bitmap?>(null)

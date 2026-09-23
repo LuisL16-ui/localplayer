@@ -58,44 +58,11 @@ class EqualizerViewModel(
         try {
             val pc = PlayerController.getInstance(getApplication(), viewModelScope)
 
-           /* pc.setOnAudioSessionIdChangedListener { sessionId ->
+            pc.setOnAudioSessionIdChangedListener { sessionId ->
                 if (sessionId != 0 && sessionId != lastEqSessionId) {
                     lastEqSessionId = sessionId
                     viewModelScope.launch {
                         safelyReinitializeEqualizer(sessionId)
-                    }
-                }
-            }*/
-            pc.setOnReadyToAttachEffectsListener { sessionId, startPlayback ->
-                viewModelScope.launch {
-                    // Evitar reinicializar el efecto si seguimos en la misma sesion.
-                    try {
-                        val savedLevels = appPrefs.getCustomBandLevels()
-                        val isEnabled = appPrefs.isEqualizerEnabled()
-                        val shouldReinitialize = sessionId != lastEqSessionId || equalizerController.getBandCount() == 0
-                        if (shouldReinitialize) {
-                            equalizerController.initializeWithAudioSession(
-                                sessionId = sessionId,
-                                bandLevels = savedLevels.ifEmpty { null },
-                                enabled = isEnabled,
-                            )
-                            lastEqSessionId = sessionId
-                        } else {
-                            equalizerController.setEnabled(isEnabled)
-                        }
-                        _equalizerEnabled.value = isEnabled
-                        val bandCount = equalizerController.getBandCount()
-                        if (bandCount > 0) {
-                            _bandCount.value = bandCount
-                            _bandFreqs.value = equalizerController.getBands()
-                            _equalizerPresets.value = sanitizePresetNames(equalizerController.getPresets())
-                            _bandLevelRange.value = equalizerController.getBandLevelRange()
-                        }
-                    } catch (e: Exception) {
-                    } finally {
-                        // Iniciar audio una sola vez, cuando la inicializacion del efecto ya corrio.
-                        kotlinx.coroutines.delay(effectSettleDelayMs)
-                        startPlayback()
                     }
                 }
             }
@@ -298,4 +265,13 @@ class EqualizerViewModel(
     }
 
     private fun sanitizePresetNames(input: List<String>): List<String> = input.map { sanitizePresetName(it) }
+
+    override fun onCleared() {
+        super.onCleared()
+        try {
+            PlayerController.getInstance(getApplication()).setOnAudioSessionIdChangedListener(null)
+            equalizerController.release()
+        } catch (_: Exception) {
+        }
+    }
 }

@@ -421,7 +421,7 @@ fun ArtistsScreen(
                         item(span = { GridItemSpan(this.maxLineSpan) }) {
                             ArtistsHeaderCard(sortedArtists = sortedArtists)
                         }
-                        items(sortedArtists) { artist ->
+                        items(sortedArtists, key = { it.name }) { artist ->
                             val context = LocalContext.current
                             // Buscar cualquier canción donde el artista normalizado coincida
                             val firstSong =
@@ -601,7 +601,7 @@ fun ArtistsScreen(
                         item {
                             ArtistsHeaderCard(sortedArtists = sortedArtists)
                         }
-                        items(sortedArtists) { artist ->
+                        items(sortedArtists, key = { it.name }) { artist ->
                             val context = LocalContext.current
                             val firstSong =
                                 songs.firstOrNull {
@@ -796,12 +796,5 @@ private enum class ArtistSortMode {
     TITLE_DESC,
 }
 
-// Normaliza nombres de artistas, separando por ',' y '/' excepto 'AC/DC'
-fun normalizeArtistName(artist: String): List<String> {
-    val trimmed = artist.trim()
-    return if (trimmed.equals("AC/DC", ignoreCase = true)) {
-        listOf("AC/DC")
-    } else {
-        trimmed.split(',', '/').map { it.trim() }.filter { it.isNotEmpty() }
-    }
-}
+fun normalizeArtistName(artist: String): List<String> =
+    com.cvc953.localplayer.util.normalizeArtistName(artist)

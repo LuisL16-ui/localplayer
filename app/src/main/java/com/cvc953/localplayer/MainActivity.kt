@@ -47,14 +47,14 @@ class MainActivity : ComponentActivity() {
             val primaryColorHex by viewModel.primaryColorHex.collectAsStateWithLifecycle()
             val primaryColor = resolvePrimaryColor(primaryColorHex).color
             LocalPlayerTheme(darkTheme = darkTheme, primaryColor = primaryColor) {
-                // Configuración global de barra de estado
                 val view = androidx.compose.ui.platform.LocalView.current
                 androidx.compose.runtime.SideEffect {
                     val window = (view.context as? android.app.Activity)?.window
-                    window?.statusBarColor = if (darkTheme) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
-                    androidx.core.view.WindowCompat
-                        .getInsetsController(window!!, view)
-                        ?.isAppearanceLightStatusBars = !darkTheme
+                    if (window != null) {
+                        androidx.core.view.WindowCompat
+                            .getInsetsController(window, view)
+                            .isAppearanceLightStatusBars = !darkTheme
+                    }
                 }
                 MusicScreen(audioFileUri = audioFileUri) { }
             }
@@ -73,9 +73,7 @@ class MainActivity : ComponentActivity() {
         if (languageCode != "sistema") {
             val locale =
                 when (languageCode) {
-                    "es" -> Locale("es")
-                    "en" -> Locale("en")
-                    "it" -> Locale("it")
+                    "es", "en", "it" -> Locale.forLanguageTag(languageCode)
                     else -> Locale.getDefault()
                 }
 

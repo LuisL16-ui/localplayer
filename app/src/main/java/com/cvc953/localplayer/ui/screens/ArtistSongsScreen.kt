@@ -136,7 +136,7 @@ fun ArtistSongsScreen(
             contentPadding = PaddingValues(start = 16.dp, top = 16.dp, bottom = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(visibleSongs) { song ->
+            items(visibleSongs, key = { it.id }) { song ->
                 DraggableSwipeRow(
                     onSwipeThreshold = {
                         playbackViewModel.addToQueueNext(song)

@@ -380,7 +380,7 @@ fun GenresScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(sortedGenres) { genre ->
+                        items(sortedGenres, key = { it.name }) { genre ->
                             GenreGridItem(
                                 genre = genre,
                                 onClick = { onGenreClick(genre.name) },
@@ -400,7 +400,7 @@ fun GenresScreen(
                             ),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(sortedGenres) { genre ->
+                        items(sortedGenres, key = { it.name }) { genre ->
                             GenreListItem(
                                 genre = genre,
                                 playbackViewModel = playbackViewModel,

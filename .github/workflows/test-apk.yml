@@ -34,19 +34,36 @@ jobs:
       - name: Prepare signing keystore
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
-        run: |
-          if [[ -z "$SIGNING_KEYSTORE_BASE64" ]]; then
-            echo "::error::Signing keystore secret is missing."
-            exit 1
-          fi
-          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > app/release.keystore
-
-      - name: Build release APK
-        env:
-          ANDROID_SIGNING_STORE_FILE: release.keystore
           ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
           ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
           ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        run: |
+          echo "ANDROID_SIGNING_STORE_FILE=release.keystore" >> "$GITHUB_ENV"
+
+          if [[ -n "$SIGNING_KEYSTORE_BASE64" && -n "$ANDROID_SIGNING_STORE_PASSWORD" && -n "$ANDROID_SIGNING_KEY_ALIAS" && -n "$ANDROID_SIGNING_KEY_PASSWORD" ]]; then
+            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > app/release.keystore
+            exit 0
+          fi
+
+          echo "::warning::Signing secrets are missing or incomplete. Generating temporary CI keystore."
+          keytool -genkeypair \
+            -alias ci-release \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 3650 \
+            -storetype PKCS12 \
+            -keystore app/release.keystore \
+            -storepass android \
+            -keypass android \
+            -dname "CN=LocalPlayer CI, O=LocalPlayer, C=US"
+
+          {
+            echo "ANDROID_SIGNING_STORE_PASSWORD=android"
+            echo "ANDROID_SIGNING_KEY_ALIAS=ci-release"
+            echo "ANDROID_SIGNING_KEY_PASSWORD=android"
+          } >> "$GITHUB_ENV"
+
+      - name: Build release APK
         run: |
           if [[ -z "$ANDROID_SIGNING_STORE_PASSWORD" || -z "$ANDROID_SIGNING_KEY_ALIAS" || -z "$ANDROID_SIGNING_KEY_PASSWORD" ]]; then
             echo "::error::Signing secrets are incomplete."

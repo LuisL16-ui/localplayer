@@ -108,12 +108,18 @@ class PlayerWidget {
 
         private fun loadAlbumArt(context: Context, songUri: String): Bitmap? = runCatching {
             val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(context, Uri.parse(songUri))
-            val embeddedArt = retriever.embeddedPicture
-            retriever.release()
-            embeddedArt?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-                ?.let(::scaleAlbumArt)
-                ?.let(::roundedAlbumArt)
+            try {
+                retriever.setDataSource(context, Uri.parse(songUri))
+                val embeddedArt = retriever.embeddedPicture
+                embeddedArt?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                    ?.let(::scaleAlbumArt)
+                    ?.let(::roundedAlbumArt)
+            } finally {
+                try {
+                    retriever.release()
+                } catch (_: Exception) {
+                }
+            }
         }.getOrNull()
 
         private fun scaleAlbumArt(source: Bitmap): Bitmap {

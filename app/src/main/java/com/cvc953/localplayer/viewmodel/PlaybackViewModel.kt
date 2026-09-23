@@ -856,4 +856,13 @@ class PlaybackViewModel(
     fun togglePlayPause() {
         if (playerState.value.isPlaying) pause() else resume()
     }
+
+    override fun onCleared() {
+        playerController.setOnReadyToAttachEffectsListener(null)
+        super.onCleared()
+        try {
+            startupEqualizerController.release()
+        } catch (_: Exception) {
+        }
+    }
 }

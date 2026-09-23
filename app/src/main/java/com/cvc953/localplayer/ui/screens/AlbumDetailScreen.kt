@@ -52,6 +52,7 @@ import com.cvc953.localplayer.viewmodel.PlaybackViewModel
 import com.cvc953.localplayer.viewmodel.PlaylistViewModel
 import com.cvc953.localplayer.viewmodel.SongViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cvc953.localplayer.util.getSongsForAlbum
 
 @Suppress("ktlint:standard:function-naming")
 @Composable
@@ -69,33 +70,14 @@ fun AlbumDetailScreen(
     val playerState by playbackViewModel.playerState.collectAsState()
     val playlists by playlistViewModel.playlists.collectAsState()
 
-    // Cargar canciones cuando el componente se compone
     LaunchedEffect(albumName, artistName) {
         albumViewModel.loadSongsForAlbumByName(albumName, artistName)
     }
 
-    // Filtrar canciones del álbum donde el artista participa (en cualquier posición)
-    // Nota: Aunque loadSongsForAlbumByName ya filtra, mantenemos este filtro por si acaso o para ordenar
     val albumSongs =
         remember(songs, albumName, artistName) {
-            val normalizedRequestedArtists = normalizeArtistName(artistName).map { it.trim() }
-            songs
-                .filter { song ->
-                    val albumMatches =
-                        normalizeAlbumName(song.album).any {
-                            it.equals(
-                                albumName.trim(),
-                                ignoreCase = true,
-                            )
-                        }
-                    val artistMatches =
-                        normalizeArtistName(song.artist).any { artist ->
-                            normalizedRequestedArtists.any { requestedArtist ->
-                                artist.trim().equals(requestedArtist, ignoreCase = true)
-                            }
-                        }
-                    albumMatches && artistMatches
-                }.sortedWith(compareBy<Song>({ it.discNumber }, { it.trackNumber }))
+            getSongsForAlbum(songs, albumName, artistName)
+                .sortedWith(compareBy<Song>({ it.discNumber }, { it.trackNumber }))
         }
     val context = LocalContext.current
     var selectedSongIds by remember { mutableStateOf(emptySet<Long>()) }
@@ -223,7 +205,7 @@ fun AlbumDetailScreen(
                     Modifier.Companion.padding(16.dp),
                 )
             }
-            items(visibleSongs) { song ->
+            items(visibleSongs, key = { it.id }) { song ->
                 val isCurrent = playerState.currentSong?.id == song.id
 
                 DraggableSwipeRow(

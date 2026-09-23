@@ -4,6 +4,7 @@ import android.content.Context
 import com.cvc953.localplayer.model.Album
 import com.cvc953.localplayer.model.Song
 import com.cvc953.localplayer.model.SongRepository
+import com.cvc953.localplayer.util.getSongsForAlbum
 
 class AlbumController(
     private val context: Context,
@@ -16,24 +17,6 @@ class AlbumController(
 
     fun getAlbumByName(name: String): Album? = getAllAlbums().find { it.name.equals(name, ignoreCase = true) }
 
-    fun getSongsForAlbum(album: Album): List<Song> {
-        // Normalización: los álbumes NO se dividen por comas, solo los artistas
-        fun normalizeAlbumName(name: String): List<String> = if (name.trim().isNotEmpty()) listOf(name.trim()) else emptyList()
-        fun normalizeArtistName(artist: String): List<String> =
-            if (artist.trim().equals("AC/DC", ignoreCase = true)) listOf("AC/DC")
-            else artist.trim().split(',', '/').map { it.trim() }.filter { it.isNotEmpty() }
-
-        val mainArtist = normalizeArtistName(album.artist).firstOrNull() ?: album.artist
-        val allSongs = repository.loadSongs()
-        val strictMatches = allSongs.filter { song ->
-            normalizeAlbumName(song.album).any { it.equals(album.name.trim(), ignoreCase = true) } &&
-            normalizeArtistName(song.artist).firstOrNull()?.equals(mainArtist, ignoreCase = true) == true
-        }
-
-        if (strictMatches.isNotEmpty()) return strictMatches
-
-        return allSongs.filter { song ->
-            normalizeAlbumName(song.album).any { it.equals(album.name.trim(), ignoreCase = true) }
-        }
-    }
+    fun getSongsForAlbum(album: Album): List<Song> =
+        getSongsForAlbum(repository.loadSongs(), album.name, album.artist)
 }

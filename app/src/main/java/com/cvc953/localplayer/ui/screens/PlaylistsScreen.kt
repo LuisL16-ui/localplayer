@@ -651,7 +651,7 @@ fun PlaylistsScreen(
                             }
                         }
 
-                        items(sortedPlaylists) { playlist ->
+                        items(sortedPlaylists, key = { it.name }) { playlist ->
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,

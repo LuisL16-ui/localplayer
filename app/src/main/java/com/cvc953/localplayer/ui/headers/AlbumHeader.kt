@@ -52,13 +52,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cvc953.localplayer.R
 import com.cvc953.localplayer.model.Song
 import com.cvc953.localplayer.ui.extendedColors
-import com.cvc953.localplayer.ui.screens.normalizeAlbumName
-import com.cvc953.localplayer.ui.screens.normalizeArtistName
+import com.cvc953.localplayer.util.getSongsForAlbum
 import com.cvc953.localplayer.viewmodel.AlbumViewModel
 import com.cvc953.localplayer.viewmodel.PlaybackViewModel
+import com.cvc953.localplayer.viewmodel.SongViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,7 +67,7 @@ import kotlinx.coroutines.withContext
 @Suppress("ktlint:standard:function-naming")
 @Composable
 fun AlbumHeader(
-    viewModel: AlbumViewModel,
+    albumViewModel: AlbumViewModel,
     albumName: String,
     artistName: String,
     playbackViewModel: PlaybackViewModel,
@@ -75,21 +76,12 @@ fun AlbumHeader(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
 
-    val songs by viewModel.songs.collectAsState()
+    val songViewModel: SongViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val songs by songViewModel.songs.collectAsState()
     val albumSongs =
         remember(songs, albumName, artistName) {
-            val normalizedRequestedArtists = normalizeArtistName(artistName).map { it.trim() }
-            songs
-                .filter { song ->
-                    val albumMatches = normalizeAlbumName(song.album).any { it.equals(albumName.trim(), ignoreCase = true) }
-                    val artistMatches =
-                        normalizeArtistName(song.artist).any { artist ->
-                            normalizedRequestedArtists.any { requestedArtist ->
-                                artist.trim().equals(requestedArtist, ignoreCase = true)
-                            }
-                        }
-                    albumMatches && artistMatches
-                }.sortedWith(compareBy<Song>({ it.discNumber }, { it.trackNumber }))
+            getSongsForAlbum(songs, albumName, artistName)
+                .sortedWith(compareBy<Song>({ it.discNumber }, { it.trackNumber }))
         }
     var albumArt by remember { mutableStateOf<Bitmap?>(null) }
     val firstSong = albumSongs.firstOrNull()

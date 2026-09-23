@@ -95,22 +95,26 @@ class AlbumEditViewModel(
 
     private fun loadExistingCover(filePath: String?, uri: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            if (userSelectedCover) return@launch
+            val retriever = android.media.MediaMetadataRetriever()
             try {
-                // Si el usuario ya eligió una imagen, no pisar
-                if (userSelectedCover) return@launch
-                val retriever = android.media.MediaMetadataRetriever()
                 if (filePath != null) {
                     retriever.setDataSource(filePath)
                 } else {
                     retriever.setDataSource(getApplication(), Uri.parse(uri))
                 }
                 val data = retriever.embeddedPicture
-                retriever.release()
                 if (data != null && !userSelectedCover) {
                     val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
                     _coverArtState.value = CoverArtState(currentBitmap = bitmap)
                 }
-            } catch (_: Exception) { }
+            } catch (_: Exception) {
+            } finally {
+                try {
+                    retriever.release()
+                } catch (_: Exception) {
+                }
+            }
         }
     }
 

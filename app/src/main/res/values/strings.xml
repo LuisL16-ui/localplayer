@@ -275,7 +275,7 @@
     <string name="edit_details">Editar detalles</string>
     <string name="album_edit_track_count">Se aplica a %d canciones</string>
     <string name="album_edit_partial_failure_title">Algunas canciones fallaron</string>
-    <string name="album_edit_partial_failure_message">%d canciones actualizadas, %d fallaron</string>
+    <string name="album_edit_partial_failure_message">%1$d canciones actualizadas, %2$d fallaron</string>
     <string name="error_invalid_image">Imagen inválida</string>
     <string name="error_file_in_use">Archivo en uso — cerrá otras apps</string>
     <string name="error_format_not_writable">Este formato no soporta escritura de tags</string>

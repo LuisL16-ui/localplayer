@@ -15,6 +15,7 @@ import com.cvc953.localplayer.preferences.AppPrefs
 import com.cvc953.localplayer.util.TagWriteInput
 import com.cvc953.localplayer.util.TagWriteResult
 import com.cvc953.localplayer.util.TagWriter
+import com.cvc953.localplayer.util.groupSongsIntoAlbums
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +93,9 @@ class SongRepository internal constructor(
     private val _isSyncing = MutableStateFlow(false)
 
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    @Volatile
+    private var cachedAlbums: Pair<List<Song>, List<Album>>? = null
 
     fun loadSongs(): List<Song> {
         if (loadState == LoadState.NONE) {
@@ -350,15 +354,15 @@ class SongRepository internal constructor(
             .sortedBy { it.name.lowercase() }
     }
 
-    /**
-     * Devuelve la lista de álbumes únicos con el número de canciones de cada uno.
-     */
     fun getAllAlbums(): List<Album> {
-        val songs = loadSongs()
-        return songs
-            .groupBy { Pair(it.album.ifBlank { "Desconocido" }, it.artist.ifBlank { "Desconocido" }) }
-            .map { (key, songs) -> Album(key.first, key.second, songs.size) }
-            .sortedWith(compareBy({ it.name.lowercase() }, { it.artist.lowercase() }))
+        val currentSongs = loadSongs()
+        val cache = cachedAlbums
+        if (cache != null && cache.first === currentSongs) {
+            return cache.second
+        }
+        val computed = groupSongsIntoAlbums(currentSongs)
+        cachedAlbums = currentSongs to computed
+        return computed
     }
 
     fun countSongsForFolder(folderUriString: String): Int =

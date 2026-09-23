@@ -29,6 +29,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -95,12 +96,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    // Glance AppWidget
-    implementation(libs.glance.appwidget)
-    implementation(libs.glance.material3)
-
-    // Glance testing
-    androidTestImplementation(libs.glance.testing)
 
     // Mocking for unit tests
     testImplementation(libs.mockk)
@@ -108,13 +103,11 @@ dependencies {
 
     // Implementación real de org.json para los unit tests (el stub de android.jar lanza excepciones)
     testImplementation(libs.org.json)
+    testImplementation("net.sf.kxml:kxml2:2.3.0")
+    testImplementation("xmlpull:xmlpull:1.1.3.1")
     androidTestImplementation(libs.mockk)
     androidTestImplementation(libs.mockkandroid)
 
-    // Third-party
-    implementation("io.coil-kt:coil-compose:2.6.0")
-
-    // Media3
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
     implementation("androidx.media3:media3-session:1.2.1")
@@ -131,9 +124,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
-
-    // StateFlow + collectAsState
-    implementation("androidx.compose.runtime:runtime-livedata")
 
     // Palette para extraer color dominante
     implementation("androidx.palette:palette:1.0.0")
